@@ -1,0 +1,74 @@
+---
+title: "poverty_concentrations"
+author: "MaryJoWebster"
+date: "January 9, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+```{r}
+
+library(readr) #importing csv files
+library(dplyr) #general analysis 
+library(ggplot2) #making charts
+library(lubridate) #date functions
+library(reshape2) #use this for melt function to create one record for each team
+library(tidyr)
+library(janitor) #use this for doing crosstabs
+library(scales) #needed for stacked bar chart axis labels
+library(knitr) #needed for making tables in markdown page
+library(htmltools)#this is needed for Rstudio to display kable and other html code
+library(rmarkdown)
+library(kableExtra)
+library(ggthemes)
+
+library(RMySQL)
+library(readxl) #for importing Excel files
+library(DT) #needed for making  searchable sortable data tble
+library(waffle)
+library(foreign) #for importing SPSS files
+library(jsonlite) #for exporting JSON
+library(car)
+library(aws.s3) #for loading to AWS server
+library(getPass)
+
+
+```
+
+```{r}
+con <- dbConnect(RMySQL::MySQL(), host = Sys.getenv("host"), dbname="Schools",user= Sys.getenv("userid"), password=Sys.getenv("pwd"))
+
+#list the tables in the database we've connected to
+#dbListTables(con)
+
+#list the fields in the table; change "mytablename" to the name of the table you're trying to connect to
+#dbListFields(con,'mytablename')
+
+
+#Pull selected data using query inside the parentheses
+data1 <- dbSendQuery(con, "select a.datayear, a.schoolid, a.districtnumber, a.districttype, b.DistrictName, b.SchoolName, b.Location, b.Metro7county, a.SchoolClassification,
+b.SchoolType, a.K12Enr, a.FreeK12, a.RedK12
+from enroll_special a left join SchoolList b on a.schoolid=b.schoolid
+where a.grade='All grades' and (a.districttype='01' or a.districttype='03' or a.districttype='07' or a.districttype='06')")
+
+#assign it to a new data frame
+enroll_special <- fetch(data1, n=-1)
+
+dbClearResult(data1)
+
+
+
+
+data2 <- dbSendQuery(con, "select * from DistrictList")
+districtlist <- fetch(data2, n=-1)
+
+dbClearResult(data2)
+						   
+
+#(after pulling in all tables add this)
+#disconnect connection
+dbDisconnect(con)
+```
+
