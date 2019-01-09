@@ -70,5 +70,75 @@ dbClearResult(data2)
 #(after pulling in all tables add this)
 #disconnect connection
 dbDisconnect(con)
+
+rm(data1)
+rm(data2)
+
+
+#pull in a file that has classification codes for old schools
+#need this to fill in some blanks in the data
+add_classification <- read_csv("add_classification.csv", col_types=cols(.default="c"))
+
+```
+```{r}
+
+#join enroll data to the districtlist to grab location information 
+enroll_special_2 <-  inner_join(enroll_special, districtlist %>% select(DistrictNumber, DistrictType,Metro7County, Location), by=c("districtnumber"="DistrictNumber", "districttype"="DistrictType"))
+
+
+#filter out the schools without any enrollment in a given year
+#add column that merges location information where it was blank in teh enrollment data, it pulls from district list data
+#winnow down the columns to include in this table
+enroll_special_2 <- enroll_special_2 %>% filter(K12Enr!="NA", K12Enr>0) %>% 
+  mutate(location_new=case_when(is.na(Location.x)~Location.y, TRUE~Location.x)) %>% 
+  select(datayear, schoolid, districtnumber, districttype, DistrictName, SchoolName, SchoolClassification, SchoolType,
+         K12Enr, FreeK12,RedK12, location_new )
+
+#add poverty columns
+#this counts reduced-price kids as .5 and free lunch kids as 1 (the formula the state uses for Basic Skills)
+enroll_special_2 <- enroll_special_2 %>% mutate(poverty=(RedK12*.5)+FreeK12,pctpoverty=poverty/K12Enr)
+
+
+#This joins  enroll data to that classification file and creates a new dataframe
+enroll_special_3 <-  inner_join(enroll_special_2, add_classification %>% select(schoolid, Classification), by=c("schoolid"="schoolid"))
+
+#This populations a classcode field with a classification number, either from the enroll data or (where missing) from the classifcation data frame
+enroll_special_3 <-  enroll_special_3 %>% mutate(classcode=case_when(is.na(SchoolClassification)~Classification, TRUE~SchoolClassification)) %>% select(datayear, schoolid, districtnumber, districttype, DistrictName,
+                                                                                                                                                        SchoolName, classcode, SchoolType,K12Enr, FreeK12, RedK12, location_new, poverty, pctpoverty)
+
+
+```
+
+```{r}
+
+#This updates the SchoolType field according to that new classcode
+#I've chosen to group some of the categories together to avoid having small buckets
+
+enroll_special_3$SchoolType[enroll_special_3$classcode=='10'] <- 'Elementary'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='20'] <- 'Middle/Junior High'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='31'] <- 'Middle/Junior High'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='32'] <- 'Secondary/Senior High'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='33'] <- 'Secondary/Senior High'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='40'] <- 'Elementary/Secondary Combo'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='41'] <- 'ALC/ALP/Private'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='42'] <- 'ALC/ALP/Private'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='43'] <- 'ALC/ALP/Private'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='46'] <- 'Distance Learning'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='50'] <- 'Special Education'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='71'] <-  'Hospital/Medical/Treatment/Misc'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='74'] <- 'Hospital/Medical/Treatment/Misc'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='77'] <- 'Hospital/Medical/Treatment/Misc'
+enroll_special_3$SchoolType[enroll_special_3$classcode=='79'] <- 'Hospital/Medical/Treatment/Misc'
+```
+
+```{r}
+#add column that identifies whether school has a high concentration of poverty
+
+
+
+```
+
+```{r}
+
 ```
 
