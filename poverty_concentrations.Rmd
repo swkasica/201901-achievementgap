@@ -103,8 +103,7 @@ enroll_special_2 <- enroll_special_2 %>% mutate(poverty=(RedK12*.5)+FreeK12,pctp
 enroll_special_3 <-  inner_join(enroll_special_2, add_classification %>% select(schoolid, Classification), by=c("schoolid"="schoolid"))
 
 #This populations a classcode field with a classification number, either from the enroll data or (where missing) from the classifcation data frame
-enroll_special_3 <-  enroll_special_3 %>% mutate(classcode=case_when(is.na(SchoolClassification)~Classification, TRUE~SchoolClassification)) %>% select(datayear, schoolid, districtnumber, districttype, DistrictName,
-                                                                                                                                                        SchoolName, classcode, SchoolType,K12Enr, FreeK12, RedK12, location_new, poverty, pctpoverty)
+enroll_special_3 <-  enroll_special_3 %>% mutate(classcode=case_when(is.na(SchoolClassification)~Classification, TRUE~SchoolClassification)) %>% select(datayear, schoolid, districtnumber, districttype, DistrictName,                                                                                         SchoolName, classcode, SchoolType,K12Enr, FreeK12, RedK12, location_new, poverty, pctpoverty)
 
 
 ```
@@ -129,16 +128,189 @@ enroll_special_3$SchoolType[enroll_special_3$classcode=='71'] <-  'Hospital/Medi
 enroll_special_3$SchoolType[enroll_special_3$classcode=='74'] <- 'Hospital/Medical/Treatment/Misc'
 enroll_special_3$SchoolType[enroll_special_3$classcode=='77'] <- 'Hospital/Medical/Treatment/Misc'
 enroll_special_3$SchoolType[enroll_special_3$classcode=='79'] <- 'Hospital/Medical/Treatment/Misc'
+
+
+
+enroll_special_3$yr[enroll_special_3$datayear=='97-98'] <- 1998
+enroll_special_3$yr[enroll_special_3$datayear=='98-99'] <- 1999
+enroll_special_3$yr[enroll_special_3$datayear=='99-00'] <- 2000
+enroll_special_3$yr[enroll_special_3$datayear=='00-01'] <- 2001 #we're missing data for this year
+enroll_special_3$yr[enroll_special_3$datayear=='01-02'] <- 2002
+enroll_special_3$yr[enroll_special_3$datayear=='02-03'] <- 2003
+enroll_special_3$yr[enroll_special_3$datayear=='03-04'] <- 2004
+enroll_special_3$yr[enroll_special_3$datayear=='04-05'] <- 2005
+enroll_special_3$yr[enroll_special_3$datayear=='05-06'] <- 2006
+enroll_special_3$yr[enroll_special_3$datayear=='06-07'] <- 2007
+enroll_special_3$yr[enroll_special_3$datayear=='07-08'] <- 2008
+enroll_special_3$yr[enroll_special_3$datayear=='08-09'] <- 2009
+enroll_special_3$yr[enroll_special_3$datayear=='09-10'] <- 2010
+enroll_special_3$yr[enroll_special_3$datayear=='10-11'] <- 2011
+enroll_special_3$yr[enroll_special_3$datayear=='11-12'] <- 2012
+enroll_special_3$yr[enroll_special_3$datayear=='12-13'] <- 2013
+enroll_special_3$yr[enroll_special_3$datayear=='13-14'] <- 2014
+enroll_special_3$yr[enroll_special_3$datayear=='14-15'] <- 2015
+enroll_special_3$yr[enroll_special_3$datayear=='15-16'] <- 2016
+enroll_special_3$yr[enroll_special_3$datayear=='16-17'] <- 2017
+enroll_special_3$yr[enroll_special_3$datayear=='17-18'] <- 2018
 ```
 
 ```{r}
-#add column that identifies whether school has a high concentration of poverty
+#add column that turns the poverty percentage into a rounded "score"
 
+enroll_special_3 <- enroll_special_3 %>%
+  mutate(povertyscore=round((pctpoverty*100),1))
+
+enroll_special_3 %>% group_by(povertyscore) %>% summarise(count=n()) %>% arrange(povertyscore)
+```
+
+```{r}
+#add column that puts those poverty scores into buckets
+
+enroll_special_3 <-  enroll_special_3 %>%
+  mutate(povertycategory = case_when(povertyscore>=74.5~'Very High',
+                                     povertyscore>=49.5 & povertyscore<74.5~'High',
+                                     povertyscore>=24.5 & povertyscore<49.5~'Medium',
+                                     povertyscore>=9.5 & povertyscore<24.5~'Low',
+                                     povertyscore<9.5~'Very low'))
+
+
+enroll_special_3 <-  enroll_special_3 %>% mutate(povcategory2 = case_when(povertycategory=='High' | povertycategory=='Very High'~'High/Very High',
+                                                                          povertycategory=='Medium'~'Medium',
+                                                                          povertycategory=='Low' | povertycategory=='Very low'~'Low/Very Low'))
+
+
+#set the order for the new povertycategory
+enroll_special_3$povertycategory <-  factor(enroll_special_3$povertycategory, levels=c("Very low", "Low", "Medium", "High", "Very High"))
+
+enroll_special_3$datayear <-  factor(enroll_special_3$datayear, levels=c("97-98", "98-99", "99-00", "00-01","01-02", "02-03", "03-04","04-05",
+                                                                         "05-06", "06-07", "07-08", "08-09", "09-10", "10-11", "11-12",
+                                                                         "12-13", "13-14", "14-15", "15-16", "16-17", "17-18"))
+
+
+ #this is counting the schools
+enroll_special_3 %>% tabyl(yr, povertycategory) %>% 
+    adorn_percentages("row") %>%
+  adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+  adorn_title("top")%>%
+  knitr::kable("html") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+
+
+```{r}
+
+g1_data <- enroll_special_3 %>% group_by(yr, povertycategory) %>% summarise(students=sum(K12Enr)) %>% mutate(pct=students/sum(students)) %>%
+  filter(yr>=2002) %>% select(yr, povertycategory, pct)
+
+
+
+g1 <- ggplot(data=g1_data, aes(x = g1_data$yr, y = pct, group=povertycategory, col=povertycategory)) +
+                  geom_line(stat="identity", size=1.5)+
+  scale_y_continuous(name="Percent of students", limits=c(0, .75), labels=percent)+
+  scale_x_continuous(name="School year", breaks=seq(2002, 2018, 1))+
+    theme_hc()+
+      labs(title = "Pct of students by school poverty category", 
+       subtitle = "2001-02 to 2017-18",
+       caption = "Graphic by MaryJo Webster")
+plot(g1)
+
+```
+
+
+```{r}
+g2_data <- enroll_special_3 %>%
+  filter(povcategory2=='High/Very High') %>% 
+  group_by(yr, location_new) %>% summarise(students=sum(poverty)) %>% mutate(pct=students/sum(students)) %>%
+  filter(yr>=2002) %>% select(yr, location_new, pct)
+
+
+
+g2 <- ggplot(data=g2_data, aes(x = g2_data$yr, y = pct, group=location_new, col=location_new)) +
+                  geom_line(stat="identity", size=1.5)+
+  scale_y_continuous(name="Percent of students", limits=c(0, .8), labels=percent)+
+  scale_x_continuous(name="School year", breaks=seq(2002, 2018, 1))+
+    theme_hc()+
+      labs(title = "Pct of poor students in high/very high", 
+       subtitle = "2001-02 to 2017-18",
+       caption = "Graphic by MaryJo Webster")
+plot(g2)
 
 
 ```
 
+
+
+```{r}
+enroll_special_3 %>% filter(location_new=='CORE CITIES', yr>=2002) %>% group_by(yr, povertycategory) %>% summarise(students=sum(K12Enr)) %>% mutate(pct=students/sum(students))
+
+enroll_special_3 %>% filter(location_new=='CORE CITIES', yr==2002) %>% select(DistrictName, SchoolName, K12Enr,pctpoverty, povertyscore) %>% arrange(pctpoverty)
+
+enroll_special_3 %>%  filter(location_new=='CORE CITIES', yr==2018) %>% group_by(povertycategory) %>% summarise(kids=sum(K12Enr), count=n())
+```
+
+
+```{r}
+enroll_special_3 %>% filter(povertycategory=='High' | povertycategory=='Very High') %>% group_by(yr) %>% summarise(schools=n(), students=sum(K12Enr), poorstudents=sum(poverty))
+```
+
+
 ```{r}
 
+
+
+
+
+#Percentage of kids in poverty who attend a high/very high poverty school (statewide)
+
+enroll_special_3 %>% filter(yr>=2002) %>% group_by(yr, povcategory2) %>% summarise(students=sum(poverty)) %>% mutate(pct=students/sum(students)) %>% filter(povcategory2=='High/Very High')
+```
+
+
+
+
+
+#Minneapolis
+```{r}
+g4_data <- enroll_special_3 %>% filter(districtnumber=='0001' & districttype=='03') %>% group_by(yr, povcategory2) %>% summarise(kids=sum(poverty)) %>% mutate(pct=kids/sum(kids))%>% select(yr, povcategory2, pct)
+
+
+
+g4 <- ggplot(data=g4_data, aes(x = g4_data$yr, y = pct, group=povcategory2, col=povcategory2)) +
+                  geom_line(stat="identity", size=1.5)+
+  scale_y_continuous(name="Percent of students", limits=c(0, 1), labels=percent)+
+  scale_x_continuous(name="School year", breaks=seq(2002, 2018, 1))+
+    theme_hc()+
+      labs(title = "Mpls: Pct of poor students in high/very high", 
+       subtitle = "2001-02 to 2017-18",
+       caption = "Graphic by MaryJo Webster")
+plot(g4)
+
+```
+
+
+
+
+#St. Paul
+```{r}
+g5_data <- enroll_special_3 %>% filter(districtnumber=='0625' & districttype=='01') %>% group_by(yr, povcategory2) %>% summarise(kids=sum(poverty)) %>% mutate(pct=kids/sum(kids))%>% select(yr, povcategory2, pct)
+
+
+
+g5 <- ggplot(data=g5_data, aes(x = g5_data$yr, y = pct, group=povcategory2, col=povcategory2)) +
+                  geom_line(stat="identity", size=1.5)+
+  scale_y_continuous(name="Percent of students", limits=c(0, 1), labels=percent)+
+  scale_x_continuous(name="School year", breaks=seq(1998, 2018, 2))+
+    theme_hc()+
+      labs(title = "St. Paul: Pct of poor students in high/very high", 
+       subtitle = "2001-02 to 2017-18",
+       caption = "Graphic by MaryJo Webster")
+plot(g5)
+
+```
+
+
+```{r}
+enroll_special_3 %>%group_by(yr) %>% summarise(poorkids=sum(poverty), totalkids=sum(K12Enr)) %>% mutate(pct=poorkids/totalkids)
 ```
 
