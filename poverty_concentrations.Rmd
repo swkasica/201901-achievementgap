@@ -208,7 +208,7 @@ g1_data <- enroll_special_3 %>% group_by(yr, povertycategory) %>% summarise(stud
 g1 <- ggplot(data=g1_data, aes(x = g1_data$yr, y = pct, group=povertycategory, col=povertycategory)) +
                   geom_line(stat="identity", size=1.5)+
   scale_y_continuous(name="Percent of students", limits=c(0, .75), labels=percent)+
-  scale_x_continuous(name="School year", breaks=seq(2002, 2018, 1))+
+  scale_x_continuous(name="School year", breaks=seq(2002, 2018, 2))+
     theme_hc()+
       labs(title = "Pct of students by school poverty category", 
        subtitle = "2001-02 to 2017-18",
@@ -242,11 +242,14 @@ plot(g2)
 
 
 ```{r}
-enroll_special_3 %>% filter(location_new=='CORE CITIES', yr>=2002) %>% group_by(yr, povertycategory) %>% summarise(students=sum(K12Enr)) %>% mutate(pct=students/sum(students))
 
-enroll_special_3 %>% filter(location_new=='CORE CITIES', yr==2002) %>% select(DistrictName, SchoolName, K12Enr,pctpoverty, povertyscore) %>% arrange(pctpoverty)
 
 enroll_special_3 %>%  filter(location_new=='CORE CITIES', yr==2018) %>% group_by(povertycategory) %>% summarise(kids=sum(K12Enr), count=n())
+```
+
+```{r}
+enroll_special_3 %>%  filter(location_new=='CORE CITIES', povertycategory=='Very High' | povertycategory=='High') %>% group_by(yr) %>% summarise(kids=sum(K12Enr), count=n())%>%  kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
 
 

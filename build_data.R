@@ -22,6 +22,27 @@ library(car)
 library(aws.s3) #for loading to AWS server
 
 
+# import UFARS ------------------------------------------------------------
+
+
+
+ufars06_18 <-  read_csv('./data/ufars06_18.csv', 
+                        col_types=cols(.default=col_character(), tot_amt=col_double()))%>% rename(datayear=dat_yer,
+                                                                                                  districtnum=dst_num,
+                                                                                                  disttype=dst_tye,
+                                                                                                  fund=fun_num,
+                                                                                                  organization=ogz_num,
+                                                                                                  program=prg_num,
+                                                                                                  finance=fna_num,
+                                                                                                  object=obj_num,
+                                                                                                  course=crs_num,
+                                                                                                  schoolclass=unt_cls)
+
+
+codes <-  read_excel("./data/UFARS/09-ListofCodes 2019.1.xlsx", sheet="CODES", range="A1:D728")
+
+
+
 # import from mysql -------------------------------------------------------
 
 
@@ -190,8 +211,6 @@ rm(data5)
 rm(data6)
 
 
-# ADD HERE -- import UFARS data -------------------------------------------
-
 
 
 
@@ -272,11 +291,68 @@ df$totalstudents[is.na(df$totalstudents)] <- 0
 df$adjusted_count[is.na(df$adjusted_count)] <- 0
 
 
-df %>% filter(yr==2018) %>% group_by(school_type) %>% summarise(rev=sum(revenue), students=sum(adjusted_count)) %>%
-  mutate(perstudent=rev/students) %>% 
-  arrange(desc(rev))
 
 
 df2018 <- df %>%  filter(yr==2018)
 
-df2018 %>% filter(is.na(mobility)) %>% group_by(school_type) %>% summarise(count=n())
+
+### Merge UFARS with school_list
+
+names(ufars06_18)
+names(school_list)
+names(district_list)
+
+district_list <-  district_list %>% rename(districtname=organization)
+
+
+#add district information and codes
+ufars06_18 <- left_join(ufars06_18, district_list %>% 
+                          select(district_number, district_type, districtname, metro7county, location),
+                        by=c("districtnum"="district_number",
+                             "disttype"="district_type"))%>%   mutate(schoolid=paste(districtnum, disttype, organization, sep="-"),
+                                      yr=as.integer(str_sub(datayear,4,6))+2000,
+                                      districtid=paste(str_sub(schoolid,1,7),'000',sep="-"))
+
+
+#ufars data has multiple rows per school per year
+#revenue data has one row per school per year
+
+#school name information is stored in revenue
+#but do we have the same schools in revenue as in the ufars data? (possibly not)
+
+#might need to ask MDE for a school lookup table (district number, districttype, school number, school name and school classification)
+
+#or try getting codes from mca table in mysql (see if I have more school info in there that what I have stored in school list)
+
+
+#filter out the English Language Learner spending (program=219)
+ufars_summary <- ufars06_18 %>% 
+  filter(program!='219')%>% group_by(datayear, yr, districtname, districtid, metro7county, location, organization) %>% summarise(tot_spent = sum(tot_amt))
+
+match_rev_ufars<-  left_join(revenue %>% 
+                                     select(schoolid, districtid, site_number, yr, revenue), ufars_summary %>% select(yr, districtid, organization, tot_spent),
+                                   by=c("districtid"="districtid", "site_number"="organization", "yr"="yr")) 
+
+
+match_ufars_rev<-  left_join(ufars_summary %>% select(yr, districtid, organization, tot_spent),
+                             revenue %>% 
+                               select(schoolid, districtid, site_number, yr, revenue), 
+                             by=c("districtid"="districtid", "organization"="site_number", "yr"="yr")) 
+
+
+
+ufars_by_district <- ufars06_18 %>%
+  filter(program!='219') %>% group_by(yr, districtid) %>% summarise(spending=sum(tot_amt))
+
+rev_by_district <-  revenue %>% group_by(yr, districtid) %>% summarise(rev=sum(revenue))
+
+match_rev_ufars_district <- left_join(rev_by_district, ufars_by_district, by=c("districtid"="districtid", "yr"="yr"))
+
+write.csv(match_rev_ufars_district, 'match_test.csv', row.names = FALSE)
+
+
+mpls <- match_rev_ufars %>% filter(districtid=='0001-03-000') %>% select(yr, site_number, revenue, tot_spent)
+sp <-  match_rev_ufars %>% filter(districtid=='0625-01-000') %>% select(yr, site_number, revenue, tot_spent)
+
+
+sp_ufars_rev <-  match_ufars_rev%>% filter(districtid=='0625-01-000') %>% select(yr, organization, revenue, tot_spent)
