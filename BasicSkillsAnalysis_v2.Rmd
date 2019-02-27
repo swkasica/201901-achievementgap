@@ -1,0 +1,247 @@
+---
+title: "BasicSkillsAnalysis_v2"
+author: "MaryJoWebster"
+date: "February 27, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, code=readLines("build_data.R"), echo=FALSE, warning=FALSE, message=FALSE}
+
+
+```
+
+#All schools that generated revenue & spent money
+(need to adjust if we get better data)
+```{r}
+match2018 <-  match2018 %>% mutate(diff=round_half_up(rev_per_need-spend_per_need))
+
+pov_level_spending <- match2018 %>% filter(revenue>0, tot_spent>0) %>% group_by(poverty_level) %>% summarise(avgrev= mean(rev_per_need),avgspend = mean(spend_per_need))
+
+
+pov_level_spending_melt <-  melt(pov_level_spending, id.vars="poverty_level")
+
+pov_level_spending_melt$variable <-  factor(pov_level_spending_melt$variable, levels=c("avgrev", "avgspend"), labels=c("Revenue", "Spending"))
+
+pov_level_spending_melt$poverty_level <- factor(pov_level_spending_melt$poverty_level, levels=c("very low", "low", "medium", "high", "very high"))
+
+
+
+
+fill <-  c("#5F9EA0", "#E1B378")
+
+g1 <-  ggplot(pov_level_spending_melt, aes(x=poverty_level, y=value, fill=variable)) + 
+  geom_bar(stat='identity', position='dodge')+
+  theme(legend.position="bottom", legend.direction="horizontal", legend.title=element_blank())+
+  scale_fill_manual(values=fill)+
+  theme_hc()+
+      labs(title = "Revenue vs spending 2017-18", 
+       subtitle = "Per adjusted count",
+       caption = "Graphic by MaryJo Webster")
+
+
+
+plot(g1)
+```
+
+#Minneapolis Public Schools
+```{r}
+match2018 %>% filter(revenue>0, district_number=='0001', district_type=='03') %>% group_by(poverty_level) %>% summarise(avgrev= mean(rev_per_need),avgspend = mean(spend_per_need), numschools=n())%>% mutate(pct=avgspend/avgrev)
+```
+#Total generated and spent by MPS
+```{r}
+match2018 %>% filter(district_number=='0001', district_type=='03') %>% 
+  summarise(rev=sum(revenue), spen=sum(tot_spent)) %>% mutate(pct=spen/rev)
+```
+
+#DULUTH
+```{r}
+match2018 %>% filter(revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% group_by(poverty_level) %>% summarise(avgrev= round_half_up(mean(rev_per_need)),avgspend = round_half_up(mean(spend_per_need)), numschools=n()) %>% mutate(pct=avgspend/avgrev)
+```
+
+
+
+#St. Paul Schools
+```{r}
+match2018 %>% filter(revenue>0, district_name=='ST. PAUL PUBLIC SCHOOL DISTRICT') %>% group_by(poverty_level) %>% summarise(avgrev= round_half_up(mean(rev_per_need)),avgspend = round_half_up(mean(spend_per_need)), numschools=n()) %>% mutate(pct=avgspend/avgrev)
+```
+
+
+```{r}
+match2018 %>% filter(district_number=='0625', district_type=='01') %>% 
+  summarise(rev=sum(revenue), spen=sum(tot_spent)) %>% mutate(pct=spen/rev)
+```
+
+
+#By Location- high poverty schools
+```{r}
+match2018 %>% filter(revenue>0, tot_spent>0, poverty_level=='high') %>% group_by(location) %>% summarise(avgrev= mean(rev_per_need),avgspend = mean(spend_per_need), numschools=n())
+```
+
+#By Location - low poverty schools
+```{r}
+match2018 %>% filter(revenue>0, tot_spent>0, poverty_level=='low') %>% group_by(location) %>% summarise(avgrev= round_half_up(mean(rev_per_need)),avgspend = round_half_up(mean(spend_per_need)), numschools=n())
+```
+
+#Minneapolis- specific schools
+```{r}
+match2018 %>% filter(revenue>0, district_number=='0001', district_type=='03') %>% 
+  select(site_name, diff, adjusted_count,revenue, grades2, tot_spent, need_level, number_in_need, rev_per_need, spend_per_need ) %>%
+  arrange(diff)
+```
+
+
+```{r}
+match2018 %>% filter(spend_per_need>50000)
+
+special %>% filter(schoolid=='0011-01-812', schoolyr==2018)
+```
+
+
+```{r}
+windowsFonts(Arial=windowsFont("TT Arial")) 
+
+scatter_data <- match2018 %>% filter(revenue>0, tot_spent>0, adjusted_count>0,schoolid!='0011-01-812', schoolid!='2906-01-010') %>% select(schoolid,poverty_level, rev_per_need, spend_per_need) %>% mutate(rev_per_need_round= round_half_up(rev_per_need), spend_per_need_round=round_half_up(spend_per_need))
+                                                                                            
+
+scatter1 <- ggplot(scatter_data, aes(x = rev_per_need_round, y = spend_per_need_round)) +
+  theme_minimal(base_size = 14, base_family = "Arial") + 
+  geom_point(size = 3, alpha = 0.5, aes(color=poverty_level)) +  #this is what makes it a scatterplot
+  labs(title = "Revenue vs spending per pupil", 
+       subtitle = "Source: Minnesota Department of Education",
+       caption = "Graphic by MaryJo Webster",
+       x="Revenue per pupil",
+       y="Spending per pupil")
+
+plot(scatter1)
+```
+
+
+```{r}
+
+
+match2018 %>% filter(revenue>0, tot_spent>0) %>% group_by(school_type) %>% summarise(avgrev= round_half_up(mean(rev_per_need)),avgspend = round_half_up(mean(spend_per_need)), numschools=n(), avgdiff = mean(diff)) %>% arrange(desc(avgspend))
+```
+
+```{r}
+match2018 %>% filter(diff>2000, tot_spent>0) %>% select(school_name, school_type, revenue, tot_spent, poverty_level, rev_per_need, spend_per_need, diff) %>% arrange(diff)
+```
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, metro7county=='yes') %>% group_by(district_name) %>%
+  summarise(rev=mean(rev_per_need), spen= mean(spend_per_need), dif=mean(diff)) %>% 
+  arrange(dif)
+```
+```{r}
+match2018 %>% filter(district_name=='ANOKA-HENNEPIN PUBLIC SCHOOL DIST.', tot_spent>0) %>% select(school_name, school_type, revenue, tot_spent, poverty_level, rev_per_need, spend_per_need, diff) %>% arrange(diff)
+```
+
+#Metro schools spending less than 50% of what they generate
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, metro7county=='yes') %>% select(school_name, district_name, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+  filter(pct_of_rev<.5)%>% kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#This is an indicator that something is wrong with UFARS data
+```{r}
+match2018 %>% filter(district_name=='HIAWATHA ACADEMIES') %>% select(school_name, district_name, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev)  %>% kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+#Burnsville
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='BURNSVILLE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Mounds View
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='MOUNDS VIEW PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+
+```{r}
+duluth <- match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) 
+
+#write.csv(duluth, 'duluth.csv', row.names=FALSE)
+
+
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Bloomington
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='BLOOMINGTON PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Minneapolis
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='Minneapolis Public School District') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#St Paul
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='ST. PAUL PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+organization code 005 is district wide
+<br>
+these records won't be in match2018
+```{r}
+ufars06_18 %>% filter(organization=='005', yr==2018) %>% group_by(districtnum, disttype) %>% summarise(spend_total=round(sum(tot_amt),0))
+```
+
+
+```{r}
+ufars06_18 %>% filter(yr=='2018', districtnum=='0001', disttype=='03', organization!='033') %>% group_by(organization) %>% summarise(spend_total=round(sum(tot_amt),0)) %>%
+   arrange(organization)
+```
+
+#number of site_numbers in revenue file 
+doesn't match number of organization numbers in ufars
+```{r}
+match2018 %>% filter(district_number=='0001', district_type=='03', yr==2018) %>% group_by(site_number) %>% summarise(rev=sum(revenue), count=n()) %>% arrange(site_number)
+```
+
+
+
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0) %>% select(school_name, district_name, poverty_level,  revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% filter(pct_of_rev>1.5) %>% 
+  arrange(desc(pct_of_rev)) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+#Minnetonka
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='MINNETONKA PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Red Lake County
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='RED LAKE COUNTY CENTRAL PUBLIC SCH') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#
+```{r}
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='ROBBINSDALE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+

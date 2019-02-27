@@ -211,43 +211,39 @@ rm(data5)
 rm(data6)
 
 
+# IDENTIFY SCHOOLS IN NEED ------------------------------------------------
+
+#sets a level (1 through 4) depending on math proficiency percentage
+#for simplicity, I cut it at quartiles, with the highest number (4) being the most in need
+math <-  math %>% mutate(need_level = case_when(math_pctproficient<.25~4,
+                                                math_pctproficient>=.25 & math_pctproficient<.5~3,
+                                                math_pctproficient>=.5 & math_pctproficient<.75~2,
+                                                math_pctproficient>=.75~1))
+
+
+#create a column that counts that number of kids below proficiency
+#(levels 1 and 2 added together)
+math <-  math %>% mutate(number_in_need = totaltested-math_totalproficient)
+
+
+#math %>% group_by(yr) %>% summarise(in_need=sum(number_in_need))
 
 
 
 
-# combine tables ----------------------------------------------------------
-#table list and fields to match on
-#checked that all the yr fields are numeric; schoolid fields are character
+# MATCH MONEY -------------------------------------------------------------
 
+#to simplify this, going to limit data down to 2017-18 school year
+#And only district types of 1, 3 and 7
 
+math2018 <-  math %>% filter(yr==2018) %>%  select(schoolid, yr, need_level, totaltested, number_in_need, math_pctproficient) %>% 
+  mutate(dist_type=str_sub(schoolid,6,7))%>% filter(dist_type=='01' | dist_type=='03' | dist_type=='07')
 
-#district_list (IDnumber)
-
-
-#revenue (schoolid, yr)
-#attend (schoolid, datayr)
-
-#mobility (schoolid, schoolyr)
-#race (schoolid, schoolyr)
-#special(schoolid, schoolyr)
-#teachers (schoolid, schoolyr)
-
-
-#math (schoolid, yr)
-#read (schoolid, yr)
-
-
-
-
-
-#openenroll -- match on districtID & yr
-
-
-
+names(revenue)
 
 revenue <- revenue %>% filter(yr>2006) %>%  select(schoolid, districtid, district_number, district_type, district_name, site_number, site_name, yr, fall_enrollment, free_lunch_count, reduced_lunch_count,
-                              adjusted_count, concentration, factor, pupil_units,
-                              revenue_per_adjusted_count, revenue) %>% 
+                                                   adjusted_count, concentration, factor, pupil_units,
+                                                   revenue_per_adjusted_count, revenue) %>% 
   rename(students_yr_prior=fall_enrollment)
 
 
@@ -257,102 +253,54 @@ df <-  left_join(revenue, school_list %>%
                    select(school_id, metro7county, location, school_name, school_location_county_name, classification, grades, school_type), by=c("schoolid"="school_id"))
 
 
+#names(df)
+
+revenue2018 <- df %>% filter(yr==2018, district_type=='01' | district_type=='03' | district_type=='07') %>%
+  mutate(grades2= str_trim(grades))
 
 
-#this is the only one that didn't match to district_list
-#df %>% filter(districtid=='1465-35-000') 
+#organization code 005 = districtwide spending
 
-#the attend table only has data for 2016-2017-2018
-df <-  left_join(df, attend %>% select(schoolid, datayear,consisten_attendance, studentcount, schoolclassifcation), by=c("schoolid"="schoolid", "yr"="datayr") )
-
-
-
-df <-  left_join(df, mobility, by=c("schoolid"="schoolid", "yr"="schoolyr"))
+ufars06_18 <- ufars06_18 %>%   mutate(schoolid=paste(districtnum, disttype, organization, sep="-"),
+                                     yr=as.integer(str_sub(datayear,4,6))+2000,
+                                     districtid=paste(str_sub(schoolid,1,7),'000',sep="-"))
 
 
 
-df <-  left_join(df, race, by=c("schoolid"="schoolid", "yr"="schoolyr"))
-
-
-df <-  left_join(df, attend %>% select(schoolid, datayr, consisten_attendance), by=c("schoolid"="schoolid", "yr"="datayr"))
-
-df <-  left_join(df, special, by=c("schoolid"="schoolid", "yr"="schoolyr"))
-
-df <-  left_join(df, teachers, by=c("schoolid"="schoolid", "yr"="schoolyr"))
-
-df <-  left_join(df, math %>% select(schoolid, yr, math_totalproficient, math_pctproficient), by=c("schoolid"="schoolid", "yr"="yr"))
-
-df <-  left_join(df, read %>% select(schoolid, yr, read_totalproficient, read_pctproficient), by=c("schoolid"="schoolid", "yr"="yr"))
-
-#write.csv(df, 'test.csv', row.names=FALSE)
-
-
-df$totalstudents[is.na(df$totalstudents)] <- 0
-df$adjusted_count[is.na(df$adjusted_count)] <- 0
+#this excludes the program 219, English Learner spending
+ufars2018 <-  ufars06_18 %>% 
+  filter(program!='219', datayear=='17-18', disttype=='01' | disttype=='03' | disttype=='07')%>%
+  group_by(yr, schoolid, disttype, districtid) %>%
+  summarise(tot_spent = sum(tot_amt))
 
 
 
 
-df2018 <- df %>%  filter(yr==2018)
+match2018 <- left_join(revenue2018, ufars2018 %>% select(schoolid, tot_spent), by=c("schoolid"="schoolid"))
+
+match2018 <- left_join(match2018, math2018, by=c("schoolid"="schoolid"))
+
+match2018 %>% group_by(need_level) %>% summarise(tot_revenue = sum(revenue),adjusted_rev=sum(revenue_per_adjusted_count), total_spent=sum(tot_spent), count=n(), pupils=sum(adjusted_count))
+
+match2018$tot_spent[is.na(match2018$tot_spent)] <- 0
+match2018$revenue[is.na(match2018$revenue)] <- 0
 
 
-### Merge UFARS with school_list
-
-names(ufars06_18)
-names(school_list)
-names(district_list)
-
-district_list <-  district_list %>% rename(districtname=organization)
+match2018 <-  match2018 %>% mutate(poverty_level = case_when(concentration>=.8~'very high',
+                                                             concentration>=.6 & concentration<.8~'high',
+                                                             concentration>=.4 & concentration<.6~'medium',
+                                                             concentration>=.2 & concentration<.4~'low',
+                                                             concentration<.2~'very low'))
 
 
-#add district information and codes
-ufars06_18 <- left_join(ufars06_18, district_list %>% 
-                          select(district_number, district_type, districtname, metro7county, location),
-                        by=c("districtnum"="district_number",
-                             "disttype"="district_type"))%>%   mutate(schoolid=paste(districtnum, disttype, organization, sep="-"),
-                                      yr=as.integer(str_sub(datayear,4,6))+2000,
-                                      districtid=paste(str_sub(schoolid,1,7),'000',sep="-"))
+#match2018 %>% filter(tot_spent>0) %>% group_by(poverty_level) %>%
+#  summarise(tot_revenue = sum(revenue),adjusted_rev=sum(revenue_per_adjusted_count), total_spent=sum(tot_spent), count=n(), pupils=sum(adjusted_count))
 
 
-#ufars data has multiple rows per school per year
-#revenue data has one row per school per year
-
-#school name information is stored in revenue
-#but do we have the same schools in revenue as in the ufars data? (possibly not)
-
-#might need to ask MDE for a school lookup table (district number, districttype, school number, school name and school classification)
-
-#or try getting codes from mca table in mysql (see if I have more school info in there that what I have stored in school list)
-
-
-#filter out the English Language Learner spending (program=219)
-ufars_summary <- ufars06_18 %>% 
-  filter(program!='219')%>% group_by(datayear, yr, districtname, districtid, metro7county, location, organization) %>% summarise(tot_spent = sum(tot_amt))
-
-match_rev_ufars<-  left_join(revenue %>% 
-                                     select(schoolid, districtid, site_number, yr, revenue), ufars_summary %>% select(yr, districtid, organization, tot_spent),
-                                   by=c("districtid"="districtid", "site_number"="organization", "yr"="yr")) 
-
-
-match_ufars_rev<-  left_join(ufars_summary %>% select(yr, districtid, organization, tot_spent),
-                             revenue %>% 
-                               select(schoolid, districtid, site_number, yr, revenue), 
-                             by=c("districtid"="districtid", "organization"="site_number", "yr"="yr")) 
+match2018 <-  match2018 %>% mutate(rev_per_need = if_else(is.na(revenue), 0, round_half_up(as.double(revenue/adjusted_count))),
+                                   spend_per_need = if_else(is.na(tot_spent), 0, round_half_up(as.double(tot_spent/adjusted_count))))
 
 
 
-ufars_by_district <- ufars06_18 %>%
-  filter(program!='219') %>% group_by(yr, districtid) %>% summarise(spending=sum(tot_amt))
-
-rev_by_district <-  revenue %>% group_by(yr, districtid) %>% summarise(rev=sum(revenue))
-
-match_rev_ufars_district <- left_join(rev_by_district, ufars_by_district, by=c("districtid"="districtid", "yr"="yr"))
-
-write.csv(match_rev_ufars_district, 'match_test.csv', row.names = FALSE)
 
 
-mpls <- match_rev_ufars %>% filter(districtid=='0001-03-000') %>% select(yr, site_number, revenue, tot_spent)
-sp <-  match_rev_ufars %>% filter(districtid=='0625-01-000') %>% select(yr, site_number, revenue, tot_spent)
-
-
-sp_ufars_rev <-  match_ufars_rev%>% filter(districtid=='0625-01-000') %>% select(yr, organization, revenue, tot_spent)
