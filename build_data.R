@@ -22,6 +22,10 @@ library(car)
 library(aws.s3) #for loading to AWS server
 
 
+options(scipen=999)
+
+library(scales)
+
 # import UFARS ------------------------------------------------------------
 
 
@@ -39,7 +43,7 @@ ufars06_18 <-  read_csv('./data/ufars06_18.csv',
                                                                                                   schoolclass=unt_cls)
 
 
-codes <-  read_excel("./data/UFARS/09-ListofCodes 2019.1.xlsx", sheet="CODES", range="A1:D728")
+codes <-  read_excel("./data/UFARS/09-ListofCodes 2019.1.xlsx", sheet="CODES", range="A1:D730")
 
 
 
@@ -87,7 +91,8 @@ dbClearResult(data3)
 
 
 #Pull teacher data 
-data4 <- dbSendQuery(con, "select idnumber as schoolid, concat('20', right(schoolyr,2)) as yr, totfte
+data4 <- dbSendQuery(con, "select idnumber as schoolid, concat('20', right(schoolyr,2)) as yr, totfte,
+newteacher, avgyrsexp
 from teacher_demographics where distnum<>'9999'")
 
 #assign it to a new data frame
@@ -135,7 +140,7 @@ special$lepservedk12[is.na(special$lepservedk12)] <- 0
 
 
 #clean up district_list data frame and add a districtid number
-district_list <- district_list %>% clean_names() 
+district_list <- district_list %>% clean_names() %>% rename(district_name=organization)
 
 school_list <-  school_list %>% clean_names()
 
@@ -146,7 +151,8 @@ race <- race %>% mutate(schoolyr=as.integer(yr)) %>% select(-yr)
 
 mobility <- mobility %>% mutate(schoolyr=as.integer(yr)) %>% select(-yr)
 
-special <- special %>% mutate(schoolyr=as.integer(yr)) %>% select(-yr)
+special <- special %>% mutate(schoolyr=as.integer(yr),
+                              districtid=paste(str_sub(schoolid,1,7),'000',sep="-")) %>% select(-yr)
 
 teachers <- teachers %>% mutate(schoolyr=as.integer(yr)) %>% select(-yr)
 
@@ -267,9 +273,21 @@ ufars06_18 <- ufars06_18 %>%   mutate(schoolid=paste(districtnum, disttype, orga
 
 
 
-#this excludes the program 219, English Learner spending
+
+ufars06_18 <-  left_join(ufars06_18, district_list %>% select(district_number, district_type, district_name), by=c("districtnum"="district_number", "disttype"="district_type"))
+
+
+
+
+program_codes <-  codes %>% filter(top_group=='Program')
+
+ufars06_18 <-  left_join(ufars06_18, program_codes %>% select(code, detail, sub_group), by=c("program"="code"))
+
+
+
+#this includes the program 219, English Learner spending
 ufars2018 <-  ufars06_18 %>% 
-  filter(program!='219', datayear=='17-18', disttype=='01' | disttype=='03' | disttype=='07')%>%
+  filter(datayear=='17-18', disttype=='01' | disttype=='03' | disttype=='07')%>%
   group_by(yr, schoolid, disttype, districtid) %>%
   summarise(tot_spent = sum(tot_amt))
 
@@ -303,4 +321,8 @@ match2018 <-  match2018 %>% mutate(rev_per_need = if_else(is.na(revenue), 0, rou
 
 
 
-
+special_district <-  special %>% group_by(districtid) %>% summarise(tot_enroll=sum(k12enr), totfreek12= sum(freek12), totredk12= sum(redk12)) %>% mutate(freelunch=totfreek12+totredk12, pctfreelunch = freelunch/tot_enroll, poverty_level = case_when(pctfreelunch>=.8~'very high',
+                                                                                                                                                                                                                                                        pctfreelunch>=.6 & pctfreelunch<.8~'high',
+                                                                                                                                                                                                                                                        pctfreelunch>=.4 & pctfreelunch<.6~'medium',
+                                                                                                                                                                                                                                                        pctfreelunch>=.2 & pctfreelunch<.4~'low',
+                                                                                                                                                                                                                                                        pctfreelunch<.2~'very low'))

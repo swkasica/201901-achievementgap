@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+
 ```
 
 ```{r, code=readLines("build_data.R"), echo=FALSE, warning=FALSE, message=FALSE}
@@ -120,6 +122,7 @@ plot(scatter1)
 ```
 
 
+#By school type
 ```{r}
 
 
@@ -129,11 +132,16 @@ match2018 %>% filter(revenue>0, tot_spent>0) %>% group_by(school_type) %>% summa
 ```{r}
 match2018 %>% filter(diff>2000, tot_spent>0) %>% select(school_name, school_type, revenue, tot_spent, poverty_level, rev_per_need, spend_per_need, diff) %>% arrange(diff)
 ```
+
+
+#Metro districts spending more than revenue
 ```{r}
 match2018 %>% filter(tot_spent>0, revenue>0, metro7county=='yes') %>% group_by(district_name) %>%
   summarise(rev=mean(rev_per_need), spen= mean(spend_per_need), dif=mean(diff)) %>% 
   arrange(dif)
 ```
+
+#anoka-hennepin
 ```{r}
 match2018 %>% filter(district_name=='ANOKA-HENNEPIN PUBLIC SCHOOL DIST.', tot_spent>0) %>% select(school_name, school_type, revenue, tot_spent, poverty_level, rev_per_need, spend_per_need, diff) %>% arrange(diff)
 ```
@@ -147,12 +155,27 @@ match2018 %>% filter(tot_spent>0, revenue>0, metro7county=='yes') %>% select(sch
 
 #This is an indicator that something is wrong with UFARS data
 ```{r}
-match2018 %>% filter(district_name=='HIAWATHA ACADEMIES') %>% select(school_name, district_name, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev)  %>% kable("html") %>%
+match2018 %>% filter(district_name=='HIAWATHA ACADEMIES') %>% select(district_number, school_name, district_name, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev)  %>% kable("html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
+
+```{r}
+ufars06_18 %>% filter(yr==2018, districtnum=='4170') %>% group_by(organization) %>% summarise(tot=sum(tot_amt))
+```
+
+```{r}
+ufars06_18 %>% filter(yr==2018, districtnum=='4170') %>% summarise(tot=sum(tot_amt))
+```
+
+```{r}
+revenue %>% filter(yr==2018, district_number=='4170') %>% summarise(rev=sum(revenue))
+```
+
+
+
 #Burnsville
 ```{r}
-match2018 %>% filter(tot_spent>0, revenue>0, district_name=='BURNSVILLE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='BURNSVILLE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) %>% 
    kable("html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
@@ -164,14 +187,14 @@ match2018 %>% filter(tot_spent>0, revenue>0, district_name=='MOUNDS VIEW PUBLIC 
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
 
-
+#Duluth
 ```{r}
-duluth <- match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) 
+duluth <- match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) 
 
 #write.csv(duluth, 'duluth.csv', row.names=FALSE)
 
 
-match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='DULUTH PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) %>% 
    kable("html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
@@ -204,9 +227,11 @@ these records won't be in match2018
 ufars06_18 %>% filter(organization=='005', yr==2018) %>% group_by(districtnum, disttype) %>% summarise(spend_total=round(sum(tot_amt),0))
 ```
 
+#Minneapolis by site number
+005=district level
 
 ```{r}
-ufars06_18 %>% filter(yr=='2018', districtnum=='0001', disttype=='03', organization!='033') %>% group_by(organization) %>% summarise(spend_total=round(sum(tot_amt),0)) %>%
+ufars06_18 %>% filter(yr=='2018', districtnum=='0001', disttype=='03') %>% group_by(organization) %>% summarise(spend_total=round(sum(tot_amt),0)) %>%
    arrange(organization)
 ```
 
@@ -217,7 +242,7 @@ match2018 %>% filter(district_number=='0001', district_type=='03', yr==2018) %>%
 ```
 
 
-
+#Schools spending  more than 150% of what they generated
 ```{r}
 match2018 %>% filter(tot_spent>0, revenue>0) %>% select(school_name, district_name, poverty_level,  revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% filter(pct_of_rev>1.5) %>% 
   arrange(desc(pct_of_rev)) %>% 
@@ -231,17 +256,236 @@ match2018 %>% filter(tot_spent>0, revenue>0, district_name=='MINNETONKA PUBLIC S
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
 
-#Red Lake County
+#Red Lake 
 ```{r}
-match2018 %>% filter(tot_spent>0, revenue>0, district_name=='RED LAKE COUNTY CENTRAL PUBLIC SCH') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+match2018 %>% filter(tot_spent>0, revenue>0, district_number=='0038') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
    kable("html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
 ```
 
-#
+#Robbinsdale
 ```{r}
-match2018 %>% filter(tot_spent>0, revenue>0, district_name=='ROBBINSDALE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2)) %>% arrange(pct_of_rev) %>% 
+match2018 %>% filter(tot_spent>0, revenue>0, district_name=='ROBBINSDALE PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) %>% 
    kable("html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Alexandria 
+aLL of the money is spent at the district level
+```{r}
+match2018 %>% filter(district_name=='ALEXANDRIA PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+#Elk River
+```{r}
+match2018 %>% filter(district_name=='ELK RIVER PUBLIC SCHOOL DISTRICT') %>% select(school_name, poverty_level, rev_per_need, spend_per_need, revenue, tot_spent) %>% mutate(pct_of_rev = round(as.double(tot_spent/revenue),2),
+                                                                                                                      pct_of_district_total = (tot_spent/sum(tot_spent))) %>% arrange(pct_of_rev) %>% 
+   kable("html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+
+
+
+#Total spending by program (with ELL)
+```{r}
+
+ufars06_18 %>% filter( yr==2018) %>%
+  group_by(sub_group) %>% summarise(tot_spent=sum(tot_amt)) %>% 
+    mutate(pct=(tot_spent/sum(tot_spent)*100)) %>% 
+  arrange(desc(tot_spent))
+  
+
+```
+
+#Total spending by program (without ELL)
+
+```{r}
+ufars06_18 %>% filter( yr==2018, program!='219') %>%
+  group_by(sub_group) %>% summarise(tot_spent=sum(tot_amt)) %>% 
+  mutate(pct=(tot_spent/sum(tot_spent)*100)) %>% 
+  arrange(desc(tot_spent))
+```
+
+#Total spent by year (including ELL)
+```{r}
+ufars06_18%>% group_by(yr) %>% summarise(tot_spent=sum(tot_amt))
+```
+
+#Total generated by year
+```{r}
+revenue %>% group_by(yr) %>% summarise(tot_rev=sum(revenue))
+```
+
+
+#districts spending Basic Skills on extra-curriculars
+```{r}
+
+
+
+ufars06_18 %>%  filter(sub_group=='extra-curriculars', yr==2018) %>% group_by(district_name) %>% summarise(tot=sum(tot_amt))
+```
+
+
+
+
+#Red Lake
+
+```{r}
+ufars06_18 %>% filter(districtnum=='0038', yr==2018) %>% group_by(sub_group) %>% summarise(tot=sum(tot_amt)) %>%
+    mutate(pct=(tot/sum(tot)*100)) %>% 
+  arrange(desc(tot))
+  
+```
+
+#St Paul schools
+```{r}
+ufars06_18 %>% filter(districtnum=='0625', yr==2018) %>% group_by(sub_group) %>% summarise(tot=sum(tot_amt)) %>%
+    mutate(pct=(tot/sum(tot)*100)) %>% 
+  arrange(desc(tot))
+  
+```
+
+#charter schools
+```{r}
+ufars06_18 %>% filter(disttype=='07', yr==2018) %>% group_by(sub_group) %>% summarise(tot=sum(tot_amt)) %>%
+    mutate(pct=(tot/sum(tot)*100)) %>% 
+  arrange(desc(tot))
+```
+
+#Traditional districts
+```{r}
+ufars06_18 %>% filter(disttype=='01' | disttype=='03', yr==2018) %>% group_by(sub_group) %>% summarise(tot=sum(tot_amt)) %>%
+    mutate(pct=(tot/sum(tot)*100)) %>% 
+  arrange(desc(tot))
+```
+
+
+
+#district revenue vs spending 2018
+```{r}
+ufars_by_district <- ufars06_18 %>%
+  filter(yr==2018, disttype=='01' | disttype=='03') %>%
+  group_by(districtid) %>%
+  summarise(spending=sum(tot_amt))
+
+rev_by_district <-  revenue %>% filter(yr==2018, district_type=='01' | district_type=='03') %>% 
+  group_by(districtid, district_name) %>% summarise(rev=sum(revenue), poverty_students=sum(adjusted_count))
+
+
+district2018 <-  inner_join(rev_by_district, ufars_by_district, by=c("districtid"="districtid"))
+
+
+ufars_district_005 <-  ufars06_18 %>% filter(program!='219', yr==2018, disttype=='01' | disttype=='03', organization=='005') %>%
+  group_by(districtid) %>% summarise(spend_005 = sum(tot_amt))
+
+
+district2018 <-  left_join(district2018, ufars_district_005, by=c("districtid"="districtid"))
+
+district2018 <-  district2018 %>% mutate(pct=as.double(case_when(spend_005>0~spend_005/spending, TRUE~0)))
+
+district2018 <-  district2018 %>% mutate(diff = as.double(rev)-as.double(spending),
+                                         pctspent = spending/rev)
+
+
+
+#money allocated to "tuition billing sites"
+ufars06_18 %>% filter(organization=='998') %>% group_by(yr) %>% summarise(tuition_billing=sum(tot_amt))
+```
+
+
+#charter districts revenue vs spending 2018
+```{r}
+ufars_charters <- ufars06_18 %>%
+  filter(yr==2018, disttype=='07') %>%
+  group_by(districtid) %>%
+  summarise(spending=sum(tot_amt))
+
+rev_charters <-  revenue %>% filter(yr==2018, district_type=='07') %>% 
+  group_by(districtid, district_name) %>% summarise(rev=sum(revenue), poverty_students=sum(adjusted_count))
+
+
+charters2018 <-  inner_join(rev_charters, ufars_charters, by=c("districtid"="districtid")) %>% mutate(diff = as.double(rev)-as.double(spending), pctspent = spending/rev)
+```
+
+
+
+#spending by district by program category
+```{r}
+district_program_2018 <-  ufars06_18 %>% filter(yr==2018) %>% group_by(districtid, district_name, sub_group) %>% summarise(total_spent=sum(tot_amt))
+
+district_program_2018_cast <- dcast(district_program_2018, districtid+district_name ~ sub_group) %>% clean_names
+
+#names(district_program_2018_cast)
+
+district_program_2018_cast$administration[is.na(district_program_2018_cast$administration)] <- 0
+district_program_2018_cast$community_education[is.na(district_program_2018_cast$community_education)] <- 0
+district_program_2018_cast$district_support_services[is.na(district_program_2018_cast$district_support_services)] <- 0
+district_program_2018_cast$ell[is.na(district_program_2018_cast$ell)] <- 0
+district_program_2018_cast$extra_curriculars[is.na(district_program_2018_cast$extra_curriculars)] <- 0
+district_program_2018_cast$instruction[is.na(district_program_2018_cast$instruction)] <- 0
+district_program_2018_cast$instructional_support_services[is.na(district_program_2018_cast$instructional_support_services)] <- 0
+district_program_2018_cast$pupil_support_services[is.na(district_program_2018_cast$pupil_support_services)] <- 0
+district_program_2018_cast$special_education[is.na(district_program_2018_cast$special_education)] <- 0
+
+district_program_2018_cast <-  district_program_2018_cast %>% mutate(total = district_program_2018_cast$administration+ district_program_2018_cast$community_education+ district_program_2018_cast$district_support_services+ district_program_2018_cast$ell+ district_program_2018_cast$extra_curriculars + district_program_2018_cast$instruction + district_program_2018_cast$instructional_support_services+ district_program_2018_cast$pupil_support_services + district_program_2018_cast$special_education,
+                                                                     pct_special_ed = special_education/total)
+
+
+```
+
+#Pct spent on special education
+```{r}
+district_program_2018_cast %>% select(district_name, total, pct_special_ed) %>% arrange(desc(pct_special_ed))
+```
+
+
+#Pct spent on administration
+```{r}
+district_program_2018_cast %>% select(district_name, total, administration) %>%
+  mutate(pct_admin = administration/total) %>% 
+  arrange(desc(pct_admin))
+```
+
+#Pct spent on pupil support services
+```{r}
+district_program_2018_cast %>% select(district_name, total, pupil_support_services) %>%
+  mutate(pct_pupil_support = pupil_support_services/total) %>% 
+  arrange(desc(pct_pupil_support))
+```
+
+
+#Pct spent on ELL
+```{r}
+district_program_2018_cast %>% select(district_name, total, ell) %>%
+  mutate(pct_ell = ell/total) %>% 
+  arrange(desc(pct_ell))
+```
+
+
+#Low poverty districts more likely to spend money on special ed
+```{r}
+district_program_2018_cast <-  left_join(district_program_2018_cast, special_district %>% select(districtid, poverty_level),by=c("districtid"="districtid"))
+
+district_program_2018_cast %>% group_by(poverty_level) %>% summarise(speced=sum(special_education), tot=sum(total)) %>% mutate(pct_spec= speced/tot)
+
+```
+
+
+#Money spendingg by poverty level of district
+```{r}
+district_program_2018 <-  left_join(district_program_2018, special_district %>% select(districtid, poverty_level),by=c("districtid"="districtid"))
+
+district_program_2018$poverty_level <- factor(district_program_2018$poverty_level, levels=c("very low", "low", "medium", "high", "very high"))
+
+  district_program_2018%>% tabyl(sub_group, poverty_level)%>%
+  adorn_percentages("col") %>%
+  adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+  adorn_title("top")%>%
+  knitr::kable("html") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+  
 ```
 
