@@ -1,0 +1,72 @@
+---
+title: "DistrictExports"
+author: "MaryJoWebster"
+date: "April 10, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, code=readLines("build_data.R"), echo=FALSE, warning=FALSE, message=FALSE}
+
+
+```
+
+```{r}
+
+#the districts that we've chosent to contact
+chosen_districts <-  read_csv('districts_chosen.csv') %>% mutate(chosen='yes') 
+
+#this is the 127 districts that are over/under by 15% plus St. Paul
+districts <-  dist_match_allyrs %>% filter(yr==2018, scope=='over by 15% or more' | scope=='under by 15% or more' | district_number=='0625') %>% ungroup() %>% select(district_name) %>% distinct() 
+
+#join the label on to indicate that we chose that district
+districts <-  left_join(districts, chosen_districts)
+
+
+#this generates charts and data files for all the districts in districts df
+#puts them in sub-directory called "district_exports"
+for (i in 1:nrow(districts)){
+
+  district = districts$district[i]
+  
+g1_data <-  gather(dist_match_allyrs %>% 
+  filter(district_name==district) %>% 
+  ungroup()%>% 
+  select(yr, rev, spent), type, amount, rev:spent)
+
+plot <- ggplot(g1_data, aes(yr, amount, fill=type))+
+  geom_bar(stat = "identity", position = 'dodge') +
+  scale_y_continuous(labels=dollar_format())+
+  scale_x_continuous(breaks=c(2007:2018, 1))+
+   scale_fill_manual(name=NULL,
+                       values=c("#00559c", "#6c7176"),
+                        breaks=c("rev", "spent"),
+                         labels=c("Revenue", "Expenditure"))+
+  theme_hc()+
+      labs(title = district, 
+       subtitle = "Compensatory revenue and spending",
+       caption = "Star Tribune analysis",
+       x="Ending fiscal year",
+       y="")
+plot
+
+plotname <-  paste('./district_exports/', district, 'graphic', sep='_')
+
+ggsave(paste(plotname, '.jpg'), plot,width=8, height=5, units="in", dpi="print" )
+
+df <-  dist_match_allyrs %>% 
+  filter(district_name==district) %>% 
+  ungroup() %>% 
+  select(yr, district_name, rev, spent, diff, pct)
+
+datafilename <-  paste('./district_exports/', district, 'data', sep='_')
+
+write.csv(df, paste(datafilename, '.csv'), row.names=FALSE)
+
+}
+```
+
+

@@ -21,7 +21,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 match2018 <-  match2018 %>% mutate(diff=round_half_up(rev_per_need-spend_per_need))
 
-pov_level_spending <- match2018 %>% filter(revenue>0, tot_spent>0) %>% group_by(poverty_level) %>% summarise(avgrev= mean(rev_per_need),avgspend = mean(spend_per_need))
+pov_level_spending <- match2018 %>% filter(district_type=='01' | district_type=='03', revenue>0, tot_spent>0) %>% group_by(poverty_level) %>% summarise(avgrev= mean(rev_per_need),avgspend = mean(spend_per_need))
 
 
 pov_level_spending_melt <-  melt(pov_level_spending, id.vars="poverty_level")
@@ -423,14 +423,14 @@ district_program_2018_cast <- dcast(district_program_2018, districtid+district_n
 district_program_2018_cast$administration[is.na(district_program_2018_cast$administration)] <- 0
 district_program_2018_cast$community_education[is.na(district_program_2018_cast$community_education)] <- 0
 district_program_2018_cast$district_support_services[is.na(district_program_2018_cast$district_support_services)] <- 0
-district_program_2018_cast$ell[is.na(district_program_2018_cast$ell)] <- 0
+#district_program_2018_cast$ell[is.na(district_program_2018_cast$ell)] <- 0
 district_program_2018_cast$extra_curriculars[is.na(district_program_2018_cast$extra_curriculars)] <- 0
 district_program_2018_cast$instruction[is.na(district_program_2018_cast$instruction)] <- 0
 district_program_2018_cast$instructional_support_services[is.na(district_program_2018_cast$instructional_support_services)] <- 0
 district_program_2018_cast$pupil_support_services[is.na(district_program_2018_cast$pupil_support_services)] <- 0
 district_program_2018_cast$special_education[is.na(district_program_2018_cast$special_education)] <- 0
 
-district_program_2018_cast <-  district_program_2018_cast %>% mutate(total = district_program_2018_cast$administration+ district_program_2018_cast$community_education+ district_program_2018_cast$district_support_services+ district_program_2018_cast$ell+ district_program_2018_cast$extra_curriculars + district_program_2018_cast$instruction + district_program_2018_cast$instructional_support_services+ district_program_2018_cast$pupil_support_services + district_program_2018_cast$special_education,
+district_program_2018_cast <-  district_program_2018_cast %>% mutate(total = district_program_2018_cast$administration+ district_program_2018_cast$community_education+ district_program_2018_cast$district_support_services+  district_program_2018_cast$extra_curriculars + district_program_2018_cast$instruction + district_program_2018_cast$instructional_support_services+ district_program_2018_cast$pupil_support_services + district_program_2018_cast$special_education,
                                                                      pct_special_ed = special_education/total)
 
 
@@ -457,12 +457,7 @@ district_program_2018_cast %>% select(district_name, total, pupil_support_servic
 ```
 
 
-#Pct spent on ELL
-```{r}
-district_program_2018_cast %>% select(district_name, total, ell) %>%
-  mutate(pct_ell = ell/total) %>% 
-  arrange(desc(pct_ell))
-```
+
 
 
 #Low poverty districts more likely to spend money on special ed
@@ -487,5 +482,66 @@ district_program_2018$poverty_level <- factor(district_program_2018$poverty_leve
   knitr::kable("html") %>% 
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
   
+```
+
+
+
+```{r}
+revenue2018 %>% group_by(district_type) %>% summarise(tot_rev=sum(revenue))
+```
+
+```{r}
+ufars2018 %>% group_by(disttype) %>% summarise(spent= sum(tot_spent))
+```
+
+
+
+
+```{r}
+
+
+
+#write.csv(dist_match_allyrs, 'dist_match.csv', row.names=FALSE)
+```
+```{r}
+
+
+
+
+
+
+dist_match_allyrs %>% filter(yr==2018, scope=='over by 15% or more'| scope=='under by 15% or more') %>% group_by(size, location, poverty_level) %>% summarise(count=n())
+
+districts_to_call <-  dist_match_allyrs %>%
+  filter(yr==2018)
+
+write.csv(dist_match_allyrs, 'dist_match.csv', row.names=FALSE)
+
+write.csv(districts_to_call, 'districts_to_call.csv', row.names = FALSE)
+```
+
+
+```{r}
+dist_match_allyrs %>%
+  filter(yr==2018, scope=='over by 15% or more' ) %>% 
+  select(district_name, pct, rev, diff) %>% 
+  arrange(desc(pct))
+```
+
+
+
+```{r}
+  dist_match_allyrs%>% tabyl(yr, scope)%>%
+  adorn_percentages("row") %>%
+  adorn_pct_formatting(rounding = "half up", digits = 0) %>%
+  adorn_title("top")%>%
+  knitr::kable("html") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, position="left")
+```
+
+
+```{r}
+
+
 ```
 

@@ -1,3 +1,6 @@
+#install.packages("pastecs")
+library(pastecs)
+
 library(readr) #importing csv files
 library(dplyr) #general analysis 
 library(ggplot2) #making charts
@@ -25,6 +28,21 @@ library(aws.s3) #for loading to AWS server
 options(scipen=999)
 
 library(scales)
+
+
+# Import Basic Skills revenue ---------------------------------------------
+
+basicskills <-  read_csv('./data/basicskills_revenue_import.csv', col_types=cols(`District Number`=col_character(), `District Type`=col_character()))%>%
+  clean_names() %>% mutate(districtid=paste(district_number, district_type, '000', sep='-'))
+
+
+basicskills2 <-  basicskills %>% select(-district_number, -district_type, -district)
+
+basicskills3 <-  melt(basicskills2, id.vars='districtid') 
+
+basicskills3 <-  basicskills3 %>% mutate(datayr=substr(variable, 2, 6),
+                                         yr= as.numeric(paste('20',substr(variable,5,6), sep='')),
+                                         type=substr(variable, 8,100))
 
 # import UFARS ------------------------------------------------------------
 
@@ -231,7 +249,6 @@ math <-  math %>% mutate(need_level = case_when(math_pctproficient<.25~4,
 #(levels 1 and 2 added together)
 math <-  math %>% mutate(number_in_need = totaltested-math_totalproficient)
 
-
 #math %>% group_by(yr) %>% summarise(in_need=sum(number_in_need))
 
 
@@ -245,7 +262,7 @@ math <-  math %>% mutate(number_in_need = totaltested-math_totalproficient)
 math2018 <-  math %>% filter(yr==2018) %>%  select(schoolid, yr, need_level, totaltested, number_in_need, math_pctproficient) %>% 
   mutate(dist_type=str_sub(schoolid,6,7))%>% filter(dist_type=='01' | dist_type=='03' | dist_type=='07')
 
-names(revenue)
+#names(revenue)
 
 revenue <- revenue %>% filter(yr>2006) %>%  select(schoolid, districtid, district_number, district_type, district_name, site_number, site_name, yr, fall_enrollment, free_lunch_count, reduced_lunch_count,
                                                    adjusted_count, concentration, factor, pupil_units,
@@ -267,7 +284,9 @@ revenue2018 <- df %>% filter(yr==2018, district_type=='01' | district_type=='03'
 
 #organization code 005 = districtwide spending
 
-ufars06_18 <- ufars06_18 %>%   mutate(schoolid=paste(districtnum, disttype, organization, sep="-"),
+ufars06_18 <- ufars06_18 %>%
+  filter(finance=='317') %>% 
+  mutate(schoolid=paste(districtnum, disttype, organization, sep="-"),
                                      yr=as.integer(str_sub(datayear,4,6))+2000,
                                      districtid=paste(str_sub(schoolid,1,7),'000',sep="-"))
 
@@ -285,7 +304,7 @@ ufars06_18 <-  left_join(ufars06_18, program_codes %>% select(code, detail, sub_
 
 
 
-#this includes the program 219, English Learner spending
+
 ufars2018 <-  ufars06_18 %>% 
   filter(datayear=='17-18', disttype=='01' | disttype=='03' | disttype=='07')%>%
   group_by(yr, schoolid, disttype, districtid) %>%
@@ -326,3 +345,49 @@ special_district <-  special %>% group_by(districtid) %>% summarise(tot_enroll=s
                                                                                                                                                                                                                                                         pctfreelunch>=.4 & pctfreelunch<.6~'medium',
                                                                                                                                                                                                                                                         pctfreelunch>=.2 & pctfreelunch<.4~'low',
                                                                                                                                                                                                                                                         pctfreelunch<.2~'very low'))
+
+# DISTRICT LEVEL ANALYSIS -------------------------------------------------
+
+dist_spent <-  ufars06_18 %>% filter(disttype=='01' | disttype=='03') %>% 
+  group_by(yr, districtnum, disttype) %>% summarise(spent= sum(tot_amt))
+
+dist_rev <-  revenue %>%   filter(district_type=='01' | district_type=='03') %>% 
+  group_by(yr, district_number, district_type, district_name) %>% summarise(rev=sum(revenue), poverty=sum(adjusted_count))
+
+
+dist_match_allyrs <-  left_join(dist_rev, dist_spent, by=c("yr"="yr", "district_number"="districtnum", "district_type"="disttype"))
+
+dist_match_allyrs$rev[is.na(dist_match_allyrs$rev)] <- 0
+dist_match_allyrs$spent[is.na(dist_match_allyrs$spent)] <- 0
+
+dist_match_allyrs <- dist_match_allyrs%>% mutate(diff=round(spent-rev,2), pct=round((diff/rev)*100,1))
+
+
+dist_match_allyrs <- dist_match_allyrs %>%
+  mutate(scope = case_when(pct>=14.49~'over by 15% or more',
+                           pct<14.49 & pct>9.49~'over by 10%-14%',
+                           pct<=9.49 & pct>0 ~'over by less than 10%',
+                           pct==0 ~'even',
+                           pct<0 & pct> -9.49 ~'under by less than 10%',
+                           pct> -14.49 & pct< -9.49~'under by 10-14%%',
+                           pct<= -14.49~'under by 15% or more',
+                           TRUE~'something went wrong'),
+         districtid=paste(district_number, district_type, '000', sep="-"))
+
+
+dist_match_allyrs <-  left_join(dist_match_allyrs, special_district %>% select(districtid, tot_enroll, pctfreelunch, poverty_level), by=c("districtid"="districtid"))
+
+
+#add size of district
+dist_match_allyrs <-  dist_match_allyrs %>% 
+  mutate(size = case_when(tot_enroll>24735~4,
+                          tot_enroll<=24735 & tot_enroll>10915~3,
+                          tot_enroll<=10915 & tot_enroll>5657~2,
+                          tot_enroll<=5657~1))
+
+#use this to figure out the break points in the above case_when
+#quantile(dist_match_allyrs$tot_enroll)
+
+#where located-- by location
+dist_match_allyrs <-  left_join(dist_match_allyrs, district_list %>% select(id_number, location), by=c("districtid"="id_number"))
+
