@@ -1,0 +1,131 @@
+---
+title: "richfield"
+author: "MaryJoWebster"
+date: "May 7, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(pastecs)
+
+library(readr) #importing csv files
+library(dplyr) #general analysis 
+library(ggplot2) #making charts
+library(lubridate) #date functions
+library(reshape2) #use this for melt function to create one record for each team
+library(tidyr)
+library(janitor) #use this for doing crosstabs
+library(scales) #needed for stacked bar chart axis labels
+library(knitr) #needed for making tables in markdown page
+library(htmltools)#this is needed for Rstudio to display kable and other html code
+library(rmarkdown)
+library(kableExtra)
+library(ggthemes)
+library(stringr)
+library(RMySQL)
+library(readxl) #for importing Excel files
+library(DT) #needed for making  searchable sortable data tble
+library(waffle)
+library(foreign) #for importing SPSS files
+library(jsonlite) #for exporting JSON
+library(car)
+library(aws.s3) #for loading to AWS server
+options(scipen=999)
+library(scales)
+
+
+#this is revenue by building for all district types
+
+richfield_revenue <-suppressMessages(read_csv('./data/compensatory_revenue_bysite_06_18.csv')) %>% 
+  clean_names() %>% 
+  mutate(schoolid=paste(district_number, district_type, site_number, sep="-"),
+         yr=as.integer(str_sub(year,4,6))+2000,
+         districtid=paste(str_sub(schoolid,1,7),'000',sep="-")) %>% 
+  filter(yr>2006, district_number=='0280')
+
+
+
+
+richfield_spend <-  suppressMessages(read_csv('./data/ufars06_18.csv', 
+                        col_types=cols(.default=col_character(), tot_amt=col_double())))%>%
+  rename(datayear=dat_yer,
+         districtnum=dst_num,
+         disttype=dst_tye,
+         fund=fun_num,
+         organization=ogz_num,
+         program=prg_num,
+         finance=fna_num,
+         object=obj_num,
+         course=crs_num,
+         schoolclass=unt_cls) %>% 
+  filter(districtnum=='0280')
+
+codes <-  read_excel("./data/UFARS/09-ListofCodes 2019.1.xlsx", sheet="CODES", range="A1:D730")
+
+
+
+richfield_spend <-  left_join(richfield_spend, codes %>% filter(top_group=='Program') %>% select(code, detail), by=c("program"="code")) %>% rename(program_category=detail)
+
+
+richfield_spend <-  left_join(richfield_spend, codes %>% filter(top_group=='Object') %>% select(code, detail), by=c("object"="code")) %>% rename(object_category=detail)
+
+```
+
+
+
+```{r}
+tot_by_year <- richfield_revenue %>% group_by( yr) %>% summarise(total= sum(revenue))
+
+tot_per_bldg <-  richfield_revenue %>% group_by(yr, site_number, site_name) %>% summarise(total_bldg = sum(revenue))
+
+per_bldg <-  left_join(tot_per_bldg, tot_by_year, by=c("yr"="yr"))
+
+per_bldg <- per_bldg %>% mutate(pct = total_bldg/total)
+
+per_bldg %>% filter(yr==2018)
+```
+
+
+```{r}
+richfield_spend %>% filter(program!='219') %>% 
+  group_by(object_category) %>% summarise(tot=sum(tot_amt)) %>% arrange(desc(tot)) %>% mutate(pct= tot/sum(tot))
+```
+
+```{r}
+per_bldg %>% filter(site_number=='695')
+```
+
+
+
+```{r}
+richfield_spend %>% filter(organization=='695', program!='219') %>% group_by(datayear) %>% summarise(total=sum(tot_amt))
+```
+
+
+```{r}
+richfield_objects <-  richfield_spend %>% filter(organization=='695', program!='219', datayear=='17-18') %>% group_by(object_category) %>% summarise(total=sum(tot_amt)) %>% arrange(desc(total))
+
+#write.csv(richfield_objects, 'richfield_spending.csv', row.names = FALSE)
+
+
+richfield_spend %>% filter(program!='219', datayear=='17-18') %>% group_by(object_category) %>% summarise(total=sum(tot_amt)) %>% arrange(desc(total))
+```
+
+```{r}
+richfield_spend %>% filter(organization=='695', program!='219', datayear=='17-18') %>% group_by(program_category) %>% summarise(total=sum(tot_amt)) %>% arrange(desc(total))
+```
+```{r}
+richfield_spend %>% filter(organization=='695', program!='219', datayear=='17-18') %>% group_by(program_category, object_category) %>% summarise(total=sum(tot_amt)) %>% arrange(desc(total))
+```
+
+```{r}
+richfield_spend %>% filter(organization=='695', program!='219', datayear=='17-18') %>%
+  group_by(object_category) %>%
+  summarise(total=sum(tot_amt)) %>% 
+  arrange(desc(total))
+```
+

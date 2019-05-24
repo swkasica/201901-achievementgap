@@ -36,21 +36,69 @@ library(scales)
 
 
 
-# Import Basic Skills revenue ---------------------------------------------
 
-basicskills <-  read_csv('./data/basicskills_revenue_import.csv', col_types=cols(`District Number`=col_character(), `District Type`=col_character()))%>%
-  clean_names() %>% mutate(districtid=paste(district_number, district_type, '000', sep='-'))
 
-#winnow down to key fields
-basicskills2 <-  basicskills %>% select(-district_number, -district_type, -district)
+#additional compensatory -- pilot, one-time and early learning 
+additional_comp <-  read_xlsx('./data/Additional district level compensatory data.xlsx', sheet='Compensatory Revenue Values', range='B4:K6611') %>% 
+  clean_names() %>% mutate(yr=as.integer(str_sub(year,4,6))+2000, districtid=paste(district_number_type, '000', sep='-'))
 
-#normalize the data so there is one row for each variable for each district/year
-basicskills3 <-  melt(basicskills2, id.vars='districtid') 
 
-#add columns for the year and the variable type
-basicskills3 <-  basicskills3 %>% mutate(datayr=substr(variable, 2, 6),
-                                         yr= as.numeric(paste('20',substr(variable,5,6), sep='')),
-                                         type=substr(variable, 8,100))
+
+#match datasets
+
+basics_skills_by_district <-  full_join(additional_comp %>% select(yr, districtid, district_name, compensatory_by_site, x1st_year_vpk_srp_compensatory, compensatory_one_time, compensatory_pilot, total_compensatory), 
+                                        el_revenue, by=c("yr"="yr", "districtid"="districtid"))
+
+basics_skills_by_district <-  left_join(basics_skills_by_district, el_conc_rev, by=c("yr"="yr", "districtid"="districtid"))
+
+basics_skills_by_district$el_rev[is.na(basics_skills_by_district$el_rev)] <-  0
+basics_skills_by_district$el_conc_rev[is.na(basics_skills_by_district$el_conc_rev)] <-  0
+
+
+foronline <-  basics_skills_by_district %>% filter(yr==2018, district_name!='NA') %>%  
+  mutate(district_name=toupper(district_name), el_total = el_rev+el_conc_rev, pilot = case_when(compensatory_pilot>0~'y', TRUE~'n'), basicskills_total = total_compensatory+el_total) %>%
+  select(district_name, pilot, total_compensatory, el_total, basicskills_total)
+
+write.csv(foronline, './output/district_totals_2018_foronline.csv', row.names=FALSE)
+
+
+
+
+
+#this is revenue by building for all district types
+#this needs to be updated when MDE sends new data
+revenue <-  read_csv('./data/compensatory_revenue_bysite_06_18.csv') %>% 
+  clean_names() %>% 
+  mutate(schoolid=paste(district_number, district_type, site_number, sep="-"),
+         yr=as.integer(str_sub(year,4,6))+2000,
+         districtid=paste(str_sub(schoolid,1,7),'000',sep="-"))
+
+
+
+#grab only the district type 2 and 7 compensatory revenue - summarized to district level
+#this needs to be updated when MDE sends new data
+comp_rev_charters <-  revenue %>% filter(district_type=='02' | district_type=='07') %>% group_by(districtid, yr) %>% summarize(comp_rev_total = sum(revenue))
+
+#this is EL revenue for charter schools - district types 2 and 7
+el_rev_charters <-  read_csv('./data/LEPTypes2and7.csv', col_types=cols(dst_num=col_character(), dst_tye=col_character(),
+                                                                        lep_rev=col_double(), lep_cnc_rev=col_double())) %>% 
+  clean_names() %>% 
+  mutate(districtid = paste(dst_num, dst_tye, '000', sep="-"),
+         total_el = lep_rev+lep_cnc_rev,
+         yr=as.integer(str_sub(dat_yer,4,6))+2000)
+
+
+#all charter school basic skills revenue
+
+charters_rev <-  left_join(comp_rev_charters, el_rev_charters, by=c("yr"="yr", "districtid"="districtid") ) %>%
+  mutate(basicskills_total = total_el + comp_rev_total)
+
+
+charters_rev %>% filter(dst_tye=='07') %>%  group_by(yr) %>% summarise(count=n(), tot= sum(basicskills_total), el = sum(total_el), comp=sum(comp_rev_total))
+
+
+
+
 
 
 # import UFARS ------------------------------------------------------------
@@ -122,20 +170,6 @@ comp_spent <-  ufars06_18 %>% filter(disttype=='01' | disttype=='03', program!='
   group_by(yr, districtid) %>% summarise(comp_spent= sum(tot_amt))
 
 
-
-#These split the revenue side into separate batches
-#English learner revenue
-el_revenue <-  basicskills3 %>% filter(type=='el_revenue') %>% select(yr, districtid, el_rev=value)
-
-#EL concentration revenue (a small boost for high concentration of EL kids)
-el_conc_rev <-  basicskills3 %>% filter(type=='el_concentration_revenue') %>% select(yr, districtid, el_conc_rev=value)
-
-#compensatory revenue
-#see file called "compensatory_revenue_bysite_06_18.csv" for calculations in how this was allocated
-comp_rev <-  basicskills3 %>% filter(type=='total_compensatory_revenue') %>% select(yr, districtid, compensatory_rev=value)
-
-#total basic skills revenue (compensatory plus both English Learner buckets)
-tot_basicskills <-  basicskills3 %>% filter(type=='total_basic_skills_revenue') %>% select(yr, districtid, basicskills_rev=value)
 
 
 
@@ -213,88 +247,21 @@ compare_districts <- compare_districts %>%  mutate( diffpct=round((diff/basicski
 compare_districts %>% filter(yr==2018) %>% group_by(diffscope) %>% summarise(count=n())
 
 
-
-
-# AUTO-GENERATE CHARTS -------------------------------------------------------------
-
-
-#this generates list of the  districts that are over/under by 15% plus St. Paul & Minneapolis
-districts <-  compare_districts %>% 
-  filter(yr==2018, diffscope=='over by 15% or more' | diffscope=='under by 15% or more' | districtid=='0625-01-000' | districtid=='0001-03-000') %>% ungroup() %>% select(district_name) %>% distinct() 
-
-
-
-#this generates charts and data files for all the districts in districts df
-#puts them in sub-directory called "district_exports"
-for (i in 1:nrow(districts)){
-  
-  district = districts$district[i]
-  
-  g1_data <-  gather(compare_districts %>% 
-                       filter(district_name==district) %>% 
-                       ungroup()%>% 
-                       select(yr, basicskills_rev, tot_spent), type, amount, basicskills_rev:tot_spent)
-  
-  plot <- ggplot(g1_data, aes(yr, amount, fill=type))+
-    geom_bar(stat = "identity", position = 'dodge') +
-    scale_y_continuous(labels=dollar_format())+
-    scale_x_continuous(breaks=c(2007:2018, 1))+
-    scale_fill_manual(name=NULL,
-                      values=c("#00559c", "#6c7176"),
-                      breaks=c("basicskills_rev", "tot_spent"),
-                      labels=c("Revenue", "Expenditure"))+
-    theme_hc()+
-    labs(title = district, 
-         subtitle = "Basic Skills revenue and spending",
-         caption = "Star Tribune analysis",
-         x="Ending fiscal year",
-         y="")
-  plot
-  
-  plotname <-  paste('./district_exports/', district, 'graphic', sep='_')
-  
-  ggsave(paste(plotname, '.jpg'), plot,width=8, height=5, units="in", dpi="print" )
-  
-  df <-  compare_districts %>% 
-    filter(district_name==district) %>% 
-    ungroup() %>% 
-    select(yr, district_name, compensatory_rev, el_rev, el_conc_rev, basicskills_rev, comp_spent, el_spent, tot_spent)
-  
-  datafilename <-  paste('./district_exports/', district, 'data', sep='_')
-  
-  write.csv(df, paste(datafilename, '.csv'), row.names=FALSE)
-  
-}
+write.csv(compare_districts, './output/districts_basicskills_totals.csv', row.names=FALSE)
 
 
 
 
-# MAKE CHARTS MANUALLY ----------------------------------------------------
-
-#use code below to create a chart for a single district and then export manually
 
 
-district2 = 'Anoka-Hennepin Public School District'
 
-g2_data <-  gather(compare_districts %>% 
-                     filter(district_name==district2) %>% 
-                     ungroup()%>% 
-                     select(yr, basicskills_rev, tot_spent), type, amount, basicskills_rev:tot_spent)
 
-plot2 <- ggplot(g2_data, aes(yr, amount, fill=type))+
-  geom_bar(stat = "identity", position = 'dodge') +
-  scale_y_continuous(labels=dollar_format())+
-  scale_x_continuous(breaks=c(2007:2018, 1))+
-  scale_fill_manual(name=NULL,
-                    values=c("#00559c", "#6c7176"),
-                    breaks=c("basicskills_rev", "tot_spent"),
-                    labels=c("Revenue", "Expenditure"))+
-  theme_hc()+
-  labs(title = district2, 
-       subtitle = "Basic Skills revenue and spending",
-       caption = "Star Tribune analysis",
-       x="Ending fiscal year",
-       y="")
-plot2
 
-compare_districts %>% filter(diffscope=='over by 15% or more', yr==2018) %>% select(district_name)
+
+
+
+
+
+
+
+                                                                                                  
