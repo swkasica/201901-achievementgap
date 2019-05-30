@@ -35,38 +35,74 @@ options(scipen=999)
 library(scales)
 
 
+# traditional districts ---------------------------------------------
+#this is the primary file MDE gave us showing total Basic Skills amounts for each district
+#But it only includes the traditional districts (types 1 and 3)
+
+#it's set up really wide with all the years going across, with multiple values for each year
+#so this next series of code pulls it in and then rearranges it
+basicskills <-  read_csv('./data/basicskills_revenue_import.csv', col_types=cols(`District Number`=col_character(), `District Type`=col_character()))%>%
+  clean_names() %>% mutate(districtid=paste(district_number, district_type, '000', sep='-'))
+
+#leave out a couple columns we don't need
+basicskills2 <-  basicskills %>% select(-district_number, -district_type)
+
+#normalize the data using melt() function
+basicskills3 <-  melt(basicskills2, id=c("districtid", "district")) 
+
+#add some new columns
+basicskills3 <-  basicskills3 %>% mutate(datayr=substr(variable, 2, 6),
+                                         yr= as.numeric(paste('20',substr(variable,5,6), sep='')),
+                                         type=substr(variable, 8,100))
 
 
+#this turns it back into wide table
+basicskills_final <- dcast(basicskills3 %>% select(districtid, district, yr, type, value), districtid + yr + district ~ type)
+
+
+#MDE failed to include in that file some of the "extra" compensatory
+#money that goes to some districts
+#pilot money is for a handful of suburban districts (plus Rochester)
+#The one-time is for only one year in the past
+#early learning is kind of sporadic
 
 #additional compensatory -- pilot, one-time and early learning 
 additional_comp <-  read_xlsx('./data/Additional district level compensatory data.xlsx', sheet='Compensatory Revenue Values', range='B4:K6611') %>% 
   clean_names() %>% mutate(yr=as.integer(str_sub(year,4,6))+2000, districtid=paste(district_number_type, '000', sep='-'))
 
 
-
-#match datasets
-
-basics_skills_by_district <-  full_join(additional_comp %>% select(yr, districtid, district_name, compensatory_by_site, x1st_year_vpk_srp_compensatory, compensatory_one_time, compensatory_pilot, total_compensatory), 
-                                        el_revenue, by=c("yr"="yr", "districtid"="districtid"))
-
-basics_skills_by_district <-  left_join(basics_skills_by_district, el_conc_rev, by=c("yr"="yr", "districtid"="districtid"))
-
-basics_skills_by_district$el_rev[is.na(basics_skills_by_district$el_rev)] <-  0
-basics_skills_by_district$el_conc_rev[is.na(basics_skills_by_district$el_conc_rev)] <-  0
+#merge the additional comp fields into basicskills_final
+basicskills_final <-  left_join(basicskills_final, additional_comp %>% 
+                                  select(districtid, yr,  compensatory_one_time, x1st_year_vpk_srp_compensatory, compensatory_pilot, total_compensatory),
+                                by=c("districtid"="districtid", "yr"="yr"))
 
 
-foronline <-  basics_skills_by_district %>% filter(yr==2018, district_name!='NA') %>%  
-  mutate(district_name=toupper(district_name), el_total = el_rev+el_conc_rev, pilot = case_when(compensatory_pilot>0~'y', TRUE~'n'), basicskills_total = total_compensatory+el_total) %>%
-  select(district_name, pilot, total_compensatory, el_total, basicskills_total)
+#get rid of null values
 
-write.csv(foronline, './output/district_totals_2018_foronline.csv', row.names=FALSE)
+basicskills_final$el_revenue[is.na(basicskills_final$el_revenue)] <-  0
+basicskills_final$el_concentration_revenue[is.na(basicskills_final$el_concentration_revenue)] <-  0
+basicskills_final$total_basic_skills_revenue[is.na(basicskills_final$total_basic_skills_revenue)] <-  0
+basicskills_final$total_compensatory_revenue[is.na(basicskills_final$total_compensatory_revenue)] <-  0
+basicskills_final$compensatory_one_time[is.na(basicskills_final$compensatory_one_time)] <-  0
+basicskills_final$x1st_year_vpk_srp_compensatory[is.na(basicskills_final$x1st_year_vpk_srp_compensatory)] <-  0
+basicskills_final$compensatory_pilot[is.na(basicskills_final$compensatory_pilot)] <-  0
+basicskills_final$total_compensatory[is.na(basicskills_final$total_compensatory)] <-  0
+
+#the column called total_compensatory_revenue is missing the pilot money
+#and some others
+#so use the one called total_compensatory
+
+
+# charter schools ---------------------------------------------------------
 
 
 
+#Now we need to pull compensatory revenue for charter schools
 
+#this is revenue by building for all district types (the first file that MDE sent us)
+#this may not include the pilot money (not sure)
+#need to use this to pull charter school compensatory revenue for the online chart
 
-#this is revenue by building for all district types
-#this needs to be updated when MDE sends new data
 revenue <-  read_csv('./data/compensatory_revenue_bysite_06_18.csv') %>% 
   clean_names() %>% 
   mutate(schoolid=paste(district_number, district_type, site_number, sep="-"),
@@ -76,10 +112,14 @@ revenue <-  read_csv('./data/compensatory_revenue_bysite_06_18.csv') %>%
 
 
 #grab only the district type 2 and 7 compensatory revenue - summarized to district level
-#this needs to be updated when MDE sends new data
-comp_rev_charters <-  revenue %>% filter(district_type=='02' | district_type=='07') %>% group_by(districtid, yr) %>% summarize(comp_rev_total = sum(revenue))
+comp_rev_charters <-  revenue %>%
+  filter(district_type=='02' | district_type=='07') %>%
+  group_by(districtid, district_name, yr) %>%
+  summarize(comp_rev_total = sum(revenue))
+
 
 #this is EL revenue for charter schools - district types 2 and 7
+#sent by MDE as a separate file
 el_rev_charters <-  read_csv('./data/LEPTypes2and7.csv', col_types=cols(dst_num=col_character(), dst_tye=col_character(),
                                                                         lep_rev=col_double(), lep_cnc_rev=col_double())) %>% 
   clean_names() %>% 
@@ -88,34 +128,68 @@ el_rev_charters <-  read_csv('./data/LEPTypes2and7.csv', col_types=cols(dst_num=
          yr=as.integer(str_sub(dat_yer,4,6))+2000)
 
 
-#all charter school basic skills revenue
-
+#create file that has basic skills revenue totals for charter schools
 charters_rev <-  left_join(comp_rev_charters, el_rev_charters, by=c("yr"="yr", "districtid"="districtid") ) %>%
   mutate(basicskills_total = total_el + comp_rev_total)
 
 
-charters_rev %>% filter(dst_tye=='07') %>%  group_by(yr) %>% summarise(count=n(), tot= sum(basicskills_total), el = sum(total_el), comp=sum(comp_rev_total))
+
+
+# for online --------------------------------------------------------------
+
+
+
+#This next set of code creates a file for a table to go with the story online
+#it has all districts for the 17-18 school year
+#showing compensatory revenue, EL revenue and a total basic skills amount
+
+#first need to pull the right fields for the traditional districts from basicskills_final
+
+foronline <-  basicskills_final %>% filter(yr==2018) %>%  
+  mutate(district=toupper(district), el_total = el_revenue+el_concentration_revenue,
+         pilot = case_when(compensatory_pilot>0~'y', TRUE~'n'), 
+         basicskills_total = total_compensatory+el_total) %>%
+  select(districtid, district, pilot, total_compensatory, el_total, basicskills_total)
+
+
+#next pull out the fields we need for charter schools
+charters_foronline <-  charters_rev %>%
+  filter(yr==2018) %>% 
+  select(districtid, district_name,comp_rev_total, total_el, basicskills_total) %>% 
+  rename(district=district_name, total_compensatory=comp_rev_total,
+         el_total=total_el) 
+
+#append the traditional schools file and charter schools file together using bind_rows()
+foronline <-  bind_rows(foronline, charters_foronline)
+
+#spit out a csv file to use in DataWrapper
+write.csv(foronline, './output/district_totals_2018_foronline.csv', row.names=FALSE)
+
+
+
+
+# ANALYSIS ----------------------------------------------------------------
+
+
+#this shows the total basic skills money going to charters each year
+charters_rev %>%
+  filter(dst_tye=='07') %>% 
+  group_by(yr) %>% summarise(count=n(), tot= sum(basicskills_total), el = sum(total_el), comp=sum(comp_rev_total))
 
 
 
 
 
 
-# import UFARS ------------------------------------------------------------
+# import UFARS spending data ------------------------------------------------------------
+#this shows how Basic Skills money was spent for 2005-06 through 2017-18
 
 ufars06_18 <-  read_csv('./data/ufars06_18.csv', 
-                        col_types=cols(.default=col_character(), tot_amt=col_double()))%>% rename(datayear=dat_yer,
-                                                                                                  districtnum=dst_num,
-                                                                                                  disttype=dst_tye,
-                                                                                                  fund=fun_num,
-                                                                                                  organization=ogz_num,
-                                                                                                  program=prg_num,
-                                                                                                  finance=fna_num,
-                                                                                                  object=obj_num,
-                                                                                                  course=crs_num,
-                                                                                                  schoolclass=unt_cls)
+                        col_types=cols(.default=col_character(), tot_amt=col_double()))%>%
+  rename(datayear=dat_yer,districtnum=dst_num, disttype=dst_tye,fund=fun_num, organization=ogz_num,
+           program=prg_num, finance=fna_num,object=obj_num,course=crs_num, schoolclass=unt_cls)
 
-#this is the list of codes (not needed for this analysis, though)
+#this is the list of codes (this gets used in the richfield.rmd)
 codes <-  read_excel("./data/UFARS/09-ListofCodes 2019.1.xlsx", sheet="CODES", range="A1:D730")
 
 
@@ -175,38 +249,28 @@ comp_spent <-  ufars06_18 %>% filter(disttype=='01' | disttype=='03', program!='
 
 #Start putting everything together
 
-#Join total basic skills revenue with compensatory revenue
-match <-  left_join(tot_basicskills, comp_rev, by=c("districtid"="districtid", "yr"="yr"))
-
-#Join what we have so far with EL revenue
-match <-  left_join(match, el_revenue, by=c("districtid"="districtid", "yr"="yr"))
-
-#Join what we have so far with EL concentration revenue
-match <-  left_join(match, el_conc_rev, by=c("districtid"="districtid", "yr"="yr"))
 
 #Join what we have so far with compensatory spending
-match <-  full_join(match, comp_spent, by=c("districtid"="districtid", "yr"="yr"))
-
-
-#Join what we have so far with EL spending
-#also filter out districts that have NULL in the basicskills revenue column
-match <-  full_join(match, el_spent, by=c("districtid"="districtid", "yr"="yr")) %>% filter(basicskills_rev!='NA')
-
-#filter out districts that have 0 basic skills revenue
-match <-  match %>% filter(basicskills_rev!=0)
-
-
+match <-  full_join(basicskills_final, comp_spent, 
+                    by=c("districtid"="districtid", "yr"="yr"))
+#join with English learner spending
+match <- full_join(match, el_spent,
+                   by=c("districtid"="districtid", "yr"="yr"))
 
 
 #add districtname and other info about the district
-compare_districts <-  left_join(match, district_list %>% select(id_number, district_name, county, metro7county, location), by=c("districtid"="id_number"))
+#filter out district without a name (MENTOR - no money either)
+compare_districts <-  left_join(match, district_list %>% select(id_number, district_name, county, metro7county, location), by=c("districtid"="id_number")) %>% 
+  filter(district_name!='NA')
+
+
 
 
 
 #fill in null values
-compare_districts$compensatory_rev[is.na(compare_districts$compensatory_rev)] <- 0
-compare_districts$el_rev[is.na(compare_districts$el_rev)] <- 0
-compare_districts$el_conc_rev[is.na(compare_districts$el_conc_rev)] <- 0
+compare_districts$total_compensatory_revenue[is.na(compare_districts$total_compensatory_revenue)] <- 0
+compare_districts$el_revenue[is.na(compare_districts$el_revenue)] <- 0
+compare_districts$el_concentration_revenue[is.na(compare_districts$el_concentration_revenue)] <- 0
 compare_districts$comp_spent[is.na(compare_districts$comp_spent)] <- 0
 compare_districts$el_spent[is.na(compare_districts$el_spent)] <- 0
 
@@ -216,9 +280,12 @@ compare_districts$el_spent[is.na(compare_districts$el_spent)] <- 0
 #calculate total spent
 #different between spending and revenue
 #pct spent is the percentage of revenue that was spent 
-compare_districts <-  compare_districts %>% mutate(tot_spent = comp_spent+el_spent,
-                                                   diff=round(basicskills_rev-tot_spent,2),
-                                                   pctspent = (tot_spent/basicskills_rev)*100)
+compare_districts <-  compare_districts %>%
+  mutate(tot_spent = comp_spent+el_spent,
+          diff=round(total_basic_skills_revenue-tot_spent,2),
+         pctspent = (tot_spent/total_basic_skills_revenue)*100)
+
+
 
 
 #add a column that puts that pct spending into buckets
@@ -232,7 +299,7 @@ compare_districts <-  compare_districts %>%
 #calculate the difference in spending as a percentage of revenue
 #then put them into buckets
 #anything that is 15% or more over or under are potentially problematic (according to MDE)
-compare_districts <- compare_districts %>%  mutate( diffpct=round((diff/basicskills_rev)*100,1),
+compare_districts <- compare_districts %>%  mutate( diffpct=round((diff/total_basic_skills_revenue)*100,1),
                                                     diffscope = case_when(diffpct>=14.49~'over by 15% or more',
                                                                           diffpct<14.49 & diffpct>9.49~'over by 10%-14%',
                                                                           diffpct<=9.49 & diffpct>0 ~'over by less than 10%',

@@ -26,7 +26,7 @@ options(scipen=999)
 library(scales)
 
 
-#need compare_districts table
+#need compare_districts table that is created in the basicskills_districts.R file
 
 
 
@@ -43,12 +43,12 @@ districts <-  compare_districts %>%
 #puts them in sub-directory called "district_exports"
 for (i in 1:nrow(districts)){
   
-  district = districts$district[i]
+  district_selected = districts$district[i]
   
   g1_data <-  gather(compare_districts %>% 
-                       filter(district_name==district) %>% 
+                       filter(district_name==district_selected) %>% 
                        ungroup()%>% 
-                       select(yr, basicskills_rev, tot_spent), type, amount, basicskills_rev:tot_spent)
+                       select(yr, total_basic_skills_revenue, tot_spent), type, amount, total_basic_skills_revenue:tot_spent)
   
   plot <- ggplot(g1_data, aes(yr, amount, fill=type))+
     geom_bar(stat = "identity", position = 'dodge') +
@@ -56,26 +56,26 @@ for (i in 1:nrow(districts)){
     scale_x_continuous(breaks=c(2007:2018, 1))+
     scale_fill_manual(name=NULL,
                       values=c("#00559c", "#6c7176"),
-                      breaks=c("basicskills_rev", "tot_spent"),
+                      breaks=c("total_basic_skills_revenue", "tot_spent"),
                       labels=c("Revenue", "Expenditure"))+
     theme_hc()+
-    labs(title = district, 
+    labs(title = district_selected, 
          subtitle = "Basic Skills revenue and spending",
          caption = "Star Tribune analysis",
          x="Ending fiscal year",
          y="")
   plot
   
-  plotname <-  paste('./district_exports/', district, 'graphic', sep='_')
+  plotname <-  paste('./district_exports/', district_selected, 'graphic', sep='_')
   
   ggsave(paste(plotname, '.jpg'), plot,width=8, height=5, units="in", dpi="print" )
   
   df <-  compare_districts %>% 
-    filter(district_name==district) %>% 
+    filter(district_name==district_selected) %>% 
     ungroup() %>% 
-    select(yr, district_name, compensatory_rev, el_rev, el_conc_rev, basicskills_rev, comp_spent, el_spent, tot_spent)
+    select(yr, district_name, total_compensatory_revenue, el_revenue, el_concentration_revenue, total_basic_skills_revenue, comp_spent, el_spent, tot_spent)
   
-  datafilename <-  paste('./district_exports/', district, 'data', sep='_')
+  datafilename <-  paste('./district_exports/', district_selected, 'data', sep='_')
   
   write.csv(df, paste(datafilename, '.csv'), row.names=FALSE)
   
@@ -88,12 +88,12 @@ for (i in 1:nrow(districts)){
 #use code below to create a chart for a single district and then export manually
 
 
-district2 = 'Shakopee Public School District'
+district2 = 'MONTGOMERY-LONSDALE SCHOOL DISTRICT'
 
 g2_data <-  gather(compare_districts %>% 
                      filter(district_name==district2) %>% 
                      ungroup()%>% 
-                     select(yr, basicskills_rev, tot_spent), type, amount, basicskills_rev:tot_spent)
+                     select(yr, total_basic_skills_revenue, tot_spent), type, amount, total_basic_skills_revenue:tot_spent)
 
 plot2 <- ggplot(g2_data, aes(yr, amount, fill=type))+
   geom_bar(stat = "identity", position = 'dodge') +
@@ -111,6 +111,5 @@ plot2 <- ggplot(g2_data, aes(yr, amount, fill=type))+
        y="")
 plot2
 
-compare_districts %>% filter(diffscope=='over by 15% or more', yr==2018) %>% select(district_name)
 
 
