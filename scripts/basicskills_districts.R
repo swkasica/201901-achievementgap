@@ -56,8 +56,14 @@ basicskills3 <-  basicskills3 %>% mutate(datayr=substr(variable, 2, 6),
                                          type=substr(variable, 8,100))
 
 
+
 #this turns it back into wide table
-basicskills_final <- dcast(basicskills3 %>% select(districtid, district, yr, type, value), districtid + yr + district ~ type)
+#also eliminates districts that had $0 basic skills revenue in a given year
+#these appear to all be districts that consolidated or were somehow closed
+#but had money in earlier years
+basicskills_final <- dcast(basicskills3 %>% 
+                             select(districtid, district, yr, type, value), districtid + yr + district ~ type) %>% 
+  filter(total_basic_skills_revenue>0)
 
 
 #MDE failed to include in that file some of the "extra" compensatory
@@ -155,10 +161,13 @@ foronline <-  basicskills_final %>% filter(yr==2018) %>%
 #next pull out the fields we need for charter schools
 charters_foronline <-  charters_rev %>%
   filter(yr==2018) %>% 
-  select(districtid, district_name,comp_rev_total, total_el, basicskills_total) %>% 
-  rename(district=district_name, total_compensatory=comp_rev_total,
+  mutate(district=toupper(district_name), pilot='n') %>% 
+  rename(total_compensatory=comp_rev_total,
          el_total=total_el) 
+select(districtid, district,comp_rev_total, total_el, basicskills_total)
 
+
+  
 #append the traditional schools file and charter schools file together using bind_rows()
 foronline <-  bind_rows(foronline, charters_foronline)
 
