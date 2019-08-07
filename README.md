@@ -1,3 +1,11 @@
+# Fork Notes
+
+![basicskills workflow](basicskills_districts_workflow.jpg)
+
+![build_data workflow](build_data_workflow.jpg)
+
+# README
+
 Data source: Minnesota Department of Education
 
 This is the code used to analyze MDE data on the "Basic Skills" revenues that school districts receive to support under-achieving students and English Learners. This amounts to more than $600 million per year, however our reporting found that there's very little oversight into how this money is spent despite a state law that specifies not only how the money can be spent, but also that districts should report how it was spent and how it is affecting achievement. 
